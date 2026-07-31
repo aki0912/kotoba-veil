@@ -1,0 +1,2 @@
+"""Kotoba Veil application package."""
+

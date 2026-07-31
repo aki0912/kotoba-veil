@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+.DS_Store
+data/*
+!data/.gitkeep
+third-party-licenses.json
