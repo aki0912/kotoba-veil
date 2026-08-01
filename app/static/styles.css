@@ -344,7 +344,16 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   line-height: 1.5;
   vertical-align: 2px;
 }
-.highlight-preview mark.rejected { --entity-soft: #e2e8f0; --entity-accent: #94a3b8; text-decoration: line-through; opacity: .68; }
+.highlight-preview mark.rejected {
+  --entity-accent: #64748b;
+  border: 1px dashed #94a3b8;
+  border-bottom-width: 2px;
+  background: transparent;
+  color: var(--ink);
+  text-decoration: none;
+  opacity: 1;
+}
+.highlight-preview mark.rejected .mark-label { background: #475569; }
 .block-separator { display: block; margin: 13px 0 5px; color: var(--muted); font-size: .64rem; font-weight: 800; letter-spacing: .08em; }
 
 .finding-heading { display: flex; align-items: center; justify-content: space-between; margin: 15px 1px 8px; }
@@ -362,11 +371,22 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   background: white;
 }
 .finding-card + .finding-card { margin-top: 6px; }
-.finding-card:has(input:not(:checked)) { opacity: .58; }
+.finding-card:has(input:not(:checked)) {
+  --entity-accent: #64748b;
+  border-style: dashed;
+  background: var(--surface-subtle);
+  color: var(--ink);
+  opacity: 1;
+}
 .finding-toggle { display: flex; align-items: center; }
 .finding-toggle input, .entity-option input { width: 18px; height: 18px; min-height: auto; accent-color: var(--entity-accent, var(--primary)); }
 .finding-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
 .finding-meta { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 3px; color: var(--muted); font-size: .67rem; }
+.finding-state { margin-left: auto; font-weight: 800; }
+.state-masked { color: #166534; }
+.state-retained { display: none; color: #334155; }
+.finding-card:has(input:not(:checked)) .state-masked { display: none; }
+.finding-card:has(input:not(:checked)) .state-retained { display: inline; }
 
 .export-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: #172033; color: white; }
 .export-bar strong, .export-bar span { display: block; }

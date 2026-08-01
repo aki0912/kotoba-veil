@@ -199,6 +199,7 @@ function renderReview() {
           <span class="entity-chip ${entityClass(finding.entity_type)}">${escapeHtml(entityLabel(finding.entity_type))}</span>
           <span>信頼度 ${Math.round(finding.score * 100)}%</span>
           <span>${escapeHtml(finding.source)}</span>
+          <span class="finding-state"><span class="state-masked">マスク対象</span><span class="state-retained">原文を残す</span></span>
         </span>
       </span>
     </label>`).join("") : '<div class="empty-state">検出候補はありません</div>';
@@ -228,7 +229,9 @@ function renderPreview() {
       html += escapeHtml(block.text.slice(cursor, finding.start));
       const accepted = state.accepted.has(finding.id);
       const label = escapeHtml(entityLabel(finding.entity_type));
-      html += `<mark class="${entityClass(finding.entity_type)} ${accepted ? "" : "rejected"}" title="${label}"><span class="mark-label">${label}</span>${escapeHtml(block.text.slice(finding.start, finding.end))}</mark>`;
+      const statusLabel = accepted ? label : "原文を残す";
+      const title = accepted ? `${label}：マスク対象` : `${label}：マスクしない`;
+      html += `<mark class="${entityClass(finding.entity_type)} ${accepted ? "" : "rejected"}" title="${escapeHtml(title)}"><span class="mark-label">${statusLabel}</span>${escapeHtml(block.text.slice(finding.start, finding.end))}</mark>`;
       cursor = finding.end;
     });
     html += escapeHtml(block.text.slice(cursor));

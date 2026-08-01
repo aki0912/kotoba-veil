@@ -37,7 +37,12 @@ def test_ui_renders_entity_labels_and_requests_labeled_mask_output() -> None:
 
     assert 'replacement_mode: "entity_label"' in script
     assert 'class="mark-label"' in script
+    assert 'const statusLabel = accepted ? label : "原文を残す"' in script
+    assert 'class="finding-state"' in script
     assert "entityClass(finding.entity_type)" in script
     assert ".entity-person" in styles
     assert ".entity-phone-number" in styles
+    assert ".highlight-preview mark.rejected" in styles
+    assert "text-decoration: none" in styles
+    assert ".state-retained" in styles
     assert "@media (max-width: 980px)" in styles
