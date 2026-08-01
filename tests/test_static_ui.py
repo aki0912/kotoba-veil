@@ -42,6 +42,9 @@ def test_ui_renders_entity_labels_and_requests_labeled_mask_output() -> None:
     assert 'replacement_mode: "entity_label"' in script
     assert 'data-label="${escapeHtml(statusLabel)}"' in script
     assert "capturePreviewSelection" in script
+    assert 'document.addEventListener("pointerup", schedulePreviewSelectionCapture)' in script
+    assert 'document.addEventListener("keyup", schedulePreviewSelectionCapture)' in script
+    assert 'document.addEventListener("selectionchange"' not in script
     assert "codePointOffsetWithin" in script
     assert 'source === "manual-selection" ? "手動追加"' in script
     assert 'class="finding-state"' in script

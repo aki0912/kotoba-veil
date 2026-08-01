@@ -7,7 +7,7 @@ const state = {
   file: null,
   settingsSelectionSnapshot: "",
   pendingSelection: null,
-  selectionTimer: null,
+  selectionCaptureTimer: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -340,6 +340,18 @@ function capturePreviewSelection() {
   renderPreview();
 }
 
+function schedulePreviewSelectionCapture() {
+  window.clearTimeout(state.selectionCaptureTimer);
+  const selection = window.getSelection();
+  if (
+    !selection
+    || selection.isCollapsed
+    || !selection.anchorNode
+    || !elements.preview.contains(selection.anchorNode)
+  ) return;
+  state.selectionCaptureTimer = window.setTimeout(capturePreviewSelection, 0);
+}
+
 function previewBlockForNode(node) {
   const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
   return element?.closest(".preview-block") || null;
@@ -488,7 +500,7 @@ function clearAnalysis() {
   state.analysis = null;
   state.accepted.clear();
   state.pendingSelection = null;
-  window.clearTimeout(state.selectionTimer);
+  window.clearTimeout(state.selectionCaptureTimer);
   elements.reviewEmpty.hidden = false;
   elements.reviewContent.hidden = true;
   elements.reviewSummary.textContent = "未解析";
@@ -575,17 +587,8 @@ elements.fileInput.addEventListener("change", () => setFile(elements.fileInput.f
   elements.dropZone.classList.remove("dragging");
 }));
 elements.dropZone.addEventListener("drop", (event) => setFile(event.dataTransfer.files[0]));
-document.addEventListener("selectionchange", () => {
-  window.clearTimeout(state.selectionTimer);
-  const selection = window.getSelection();
-  if (
-    !selection
-    || selection.isCollapsed
-    || !selection.anchorNode
-    || !elements.preview.contains(selection.anchorNode)
-  ) return;
-  state.selectionTimer = window.setTimeout(capturePreviewSelection, 180);
-});
+document.addEventListener("pointerup", schedulePreviewSelectionCapture);
+document.addEventListener("keyup", schedulePreviewSelectionCapture);
 elements.toggleAll.addEventListener("click", () => {
   const select = state.selectedEntities.size === 0;
   state.selectedEntities = new Set(select ? state.entities.map((entity) => entity.id) : []);
