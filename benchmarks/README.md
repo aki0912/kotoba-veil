@@ -65,10 +65,15 @@ python -m benchmarks.generate_synthetic
 
 ```bash
 python -m benchmarks.run --disable-nlp \
-  --fail-under-recall 0.54 \
-  --fail-under-core-zero-miss-rate 0.53 \
-  --fail-under-hard-negative-pass-rate 0.70
+  --fail-under-recall 0.95 \
+  --fail-under-core-zero-miss-rate 0.95 \
+  --fail-under-hard-negative-pass-rate 1.00
 ```
+
+CIではこのルール単体評価に加え、GiNZA込みの評価も実行します。GiNZA込みでは
+Recall、通常文書の見逃しゼロ率、ハードネガティブ合格率をそれぞれ0.99以上に固定し、
+既知ケースの回帰を検知します。これは合成データ上の回帰基準であり、実運用精度の
+保証値ではありません。
 
 ## 出力指標
 

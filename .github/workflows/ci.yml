@@ -22,9 +22,16 @@ jobs:
       - run: >-
           python -m benchmarks.run --disable-nlp
           --dataset benchmarks/datasets/synthetic-v1.jsonl
-          --output build/benchmark-report.json
-          --fail-under-recall 0.54
-          --fail-under-core-zero-miss-rate 0.53
-          --fail-under-hard-negative-pass-rate 0.70
+          --output build/benchmark-report-rules.json
+          --fail-under-recall 0.95
+          --fail-under-core-zero-miss-rate 0.95
+          --fail-under-hard-negative-pass-rate 1.00
+      - run: >-
+          python -m benchmarks.run
+          --dataset benchmarks/datasets/synthetic-v1.jsonl
+          --output build/benchmark-report-ginza.json
+          --fail-under-recall 0.99
+          --fail-under-core-zero-miss-rate 0.99
+          --fail-under-hard-negative-pass-rate 0.99
       - run: python scripts/check_licenses.py
       - run: docker build -t kotoba-veil:test .
