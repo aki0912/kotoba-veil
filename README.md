@@ -76,6 +76,12 @@ python -m benchmarks.run \
 The dataset format, metrics, threshold options, and extension rules are documented
 in `benchmarks/README.md`.
 
+## Architecture documentation
+
+Open `docs/system-architecture.html` in a browser for a standalone Japanese
+system diagram covering document extraction, PII detection responsibilities,
+review, masking, and local-data boundaries.
+
 The license check rejects copyleft, share-alike, non-commercial, or unknown
 license metadata. Two GiNZA/spaCy transitive dependencies have explicit,
 package-scoped commercial-use exceptions documented in

@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Kotoba Veil システム構成とPII処理フロー</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #eef4ff;
+      --text: #172033;
+      --muted: #5f6b7d;
+      --border: #ccd6e5;
+      --primary: #1e5aa8;
+      --primary-soft: #dceaff;
+      --green: #176b4d;
+      --green-soft: #dff5eb;
+      --amber: #8a5700;
+      --amber-soft: #fff0cd;
+      --purple: #62459a;
+      --purple-soft: #eee7ff;
+      --shadow: 0 12px 32px rgba(35, 55, 85, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1420;
+        --surface: #151f2e;
+        --surface-soft: #172a43;
+        --text: #edf3fb;
+        --muted: #afbdd0;
+        --border: #344359;
+        --primary: #8fc1ff;
+        --primary-soft: #16385f;
+        --green: #7bdab5;
+        --green-soft: #153c31;
+        --amber: #ffd17a;
+        --amber-soft: #483615;
+        --purple: #c6afff;
+        --purple-soft: #312653;
+        --shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+      line-height: 1.7;
+    }
+    a { color: var(--primary); }
+    code {
+      padding: 0.12rem 0.36rem;
+      border-radius: 0.32rem;
+      background: var(--surface-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    pre {
+      margin: 0;
+      padding: 1rem;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--surface-soft);
+    }
+    pre code { padding: 0; background: transparent; }
+
+    .page {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 2.5rem 0 4rem;
+    }
+    .hero {
+      padding: clamp(1.5rem, 4vw, 3rem);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      background: linear-gradient(135deg, var(--surface), var(--surface-soft));
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 0.4rem;
+      color: var(--primary);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { line-height: 1.35; }
+    h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.4rem, 2.5vw, 2rem); }
+    h3 { margin: 0 0 0.45rem; font-size: 1.05rem; }
+    .lead { max-width: 72ch; margin: 1rem 0 0; color: var(--muted); }
+    .badges { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 1.25rem; }
+    .badge {
+      padding: 0.34rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 0.88rem;
+      font-weight: 650;
+    }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin: 1.25rem 0 0;
+    }
+    nav a {
+      padding: 0.42rem 0.7rem;
+      border-radius: 0.55rem;
+      background: var(--surface-soft);
+      text-decoration: none;
+    }
+    section { margin-top: 3rem; scroll-margin-top: 1rem; }
+
+    .diagram {
+      padding: clamp(1rem, 3vw, 2rem);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .flow-row {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: stretch;
+      gap: 0.75rem;
+    }
+    .node {
+      min-width: 0;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 0.85rem;
+      background: var(--surface-soft);
+    }
+    .node p, .engine-card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .arrow, .down-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--primary);
+      font-size: 1.7rem;
+      font-weight: 700;
+    }
+    .down-arrow { min-height: 2.6rem; }
+    .engine {
+      padding: 1.25rem;
+      border: 2px solid var(--primary);
+      border-radius: 1rem;
+      background: var(--surface);
+    }
+    .engine-title {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .engine-title span { color: var(--muted); }
+    .normalize {
+      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
+      background: var(--green-soft);
+      color: var(--green);
+      font-weight: 650;
+    }
+    .engine-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+    .engine-card {
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 0.8rem;
+      background: var(--surface-soft);
+    }
+    .engine-card.ginza { background: var(--primary-soft); }
+    .engine-card.pattern { background: var(--green-soft); }
+    .engine-card.rules { background: var(--amber-soft); }
+    .engine-card.dictionary { background: var(--purple-soft); }
+    .merge {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: stretch;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .callout-grid, .card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      padding: 1.2rem;
+      border: 1px solid var(--border);
+      border-radius: 0.9rem;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .card p { margin: 0; color: var(--muted); }
+    .number {
+      display: inline-grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      margin-bottom: 0.65rem;
+      border-radius: 50%;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-weight: 750;
+    }
+
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); }
+    th, td { padding: 0.78rem 0.9rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { background: var(--surface-soft); font-size: 0.9rem; }
+    tr:last-child td { border-bottom: 0; }
+    .source {
+      display: inline-block;
+      padding: 0.14rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .source.ginza { color: var(--primary); background: var(--primary-soft); }
+    .source.pattern { color: var(--green); background: var(--green-soft); }
+    .source.rules { color: var(--amber); background: var(--amber-soft); }
+    .source.dictionary { color: var(--purple); background: var(--purple-soft); }
+
+    .security {
+      padding: 1.25rem;
+      border-left: 0.35rem solid var(--green);
+      border-radius: 0.75rem;
+      background: var(--green-soft);
+    }
+    .security strong { color: var(--green); }
+    details {
+      margin-top: 0.75rem;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--surface);
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    footer { margin-top: 3rem; color: var(--muted); font-size: 0.9rem; }
+
+    @media (max-width: 900px) {
+      .engine-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .callout-grid, .card-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 700px) {
+      .page { width: min(100% - 1rem, 1180px); padding-top: 0.5rem; }
+      .hero, .diagram { border-radius: 0.9rem; }
+      .flow-row, .merge { grid-template-columns: 1fr; }
+      .arrow { min-height: 1.5rem; transform: rotate(90deg); }
+      .engine-grid { grid-template-columns: 1fr; }
+      th, td { min-width: 10rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Kotoba Veil architecture</p>
+      <h1>システム構成とPII処理フロー</h1>
+      <p class="lead">
+        Kotoba Veilがテキストや文書をどこで読み取り、どの検出器でPII候補を作り、
+        人のレビューを経て元形式へマスクを書き戻すかを示します。検出はDocker内で完結し、
+        GiNZAだけに依存せず、検証可能なルールとユーザー辞書を組み合わせます。
+      </p>
+      <div class="badges" aria-label="設計上の重要事項">
+        <span class="badge">完全ローカル処理</span>
+        <span class="badge">外部API不使用</span>
+        <span class="badge">レビュー後に出力</span>
+        <span class="badge">元オフセットを維持</span>
+      </div>
+      <nav aria-label="ページ内ナビゲーション">
+        <a href="#architecture">全体構成</a>
+        <a href="#responsibility">検出責任</a>
+        <a href="#sequence">処理手順</a>
+        <a href="#files">文書形式</a>
+        <a href="#security">セキュリティ</a>
+        <a href="#limits">制約</a>
+      </nav>
+    </header>
+
+    <section id="architecture" aria-labelledby="architecture-title">
+      <h2 id="architecture-title">全体構成図</h2>
+      <div class="diagram" role="img" aria-label="ブラウザから文書入力、PII検出、レビュー、マスク出力までの構成図">
+        <div class="flow-row">
+          <div class="node">
+            <h3>1. ブラウザ</h3>
+            <p>対象PIIを選択し、テキストまたは文書を投入します。</p>
+          </div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="node">
+            <h3>2. FastAPI</h3>
+            <p>入力検証、セッション管理、検出・マスクAPIを提供します。</p>
+          </div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="node">
+            <h3>3. 文書アダプター</h3>
+            <p>TXT、DOCX、PPTX、PDFを共通のテキストブロックへ変換します。</p>
+          </div>
+        </div>
+
+        <div class="down-arrow" aria-hidden="true">↓</div>
+
+        <div class="engine">
+          <div class="engine-title">
+            <strong>4. JapanesePiiEngine</strong>
+            <span>候補は共通形式：type / start / end / score / source</span>
+          </div>
+          <div class="normalize">
+            検出専用の等長正規化：全角ASCII・数字・区切り記号を揃え、元文書の文字位置を維持
+          </div>
+          <div class="engine-grid">
+            <article class="engine-card ginza">
+              <h3>GiNZA NER</h3>
+              <p>人名・組織名・地名だけを担当。明示的なラベル許可リストで誤分類を抑えます。</p>
+            </article>
+            <article class="engine-card pattern">
+              <h3>Presidio Pattern</h3>
+              <p>メール、電話、郵便番号、URLの形式候補を抽出します。</p>
+            </article>
+            <article class="engine-card rules">
+              <h3>日本固有ルール</h3>
+              <p>住所、日付、IP、識別番号、口座、Luhn検証、文脈補完を担当します。</p>
+            </article>
+            <article class="engine-card dictionary">
+              <h3>PII辞書</h3>
+              <p>利用者が登録した語を完全一致候補にし、最も高い優先順位を与えます。</p>
+            </article>
+          </div>
+
+          <div class="merge">
+            <div class="node">
+              <h3>候補の検証</h3>
+              <p>URL終端、IP構文、Luhn、否定文脈などで形式だけの誤検出を除外します。</p>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="node">
+              <h3>対象PIIの選択</h3>
+              <p>画面で有効にしたentity typeだけを残します。</p>
+            </div>
+            <div class="arrow" aria-hidden="true">→</div>
+            <div class="node">
+              <h3>重複解決</h3>
+              <p>辞書・検証ルール・パターン・GiNZAの順で重複候補を整理します。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="down-arrow" aria-hidden="true">↓</div>
+
+        <div class="flow-row">
+          <div class="node">
+            <h3>5. レビュー画面</h3>
+            <p>候補をハイライトし、利用者が採用・解除・追加します。</p>
+          </div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="node">
+            <h3>6. マスク処理</h3>
+            <p>採用されたIDだけを元の文字位置または文書オブジェクトへ反映します。</p>
+          </div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="node">
+            <h3>7. 元形式で出力</h3>
+            <p>テキスト、DOCX、PPTX、PDFとしてローカルダウンロードします。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="responsibility" aria-labelledby="responsibility-title">
+      <h2 id="responsibility-title">PII検出の責任分担</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>PII</th>
+              <th>主検出器</th>
+              <th>検証・補完</th>
+              <th>設計理由</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>人名</td><td><span class="source ginza">GiNZA</span></td><td>敬称・入力欄文脈、PII辞書</td><td>統計NERを使い、表記揺れは文脈で補います。</td></tr>
+            <tr><td>組織名</td><td><span class="source ginza">GiNZA</span></td><td>法人種別・組織接尾辞、PII辞書</td><td>未知組織をNERで探し、法人表現と末尾数字を補完します。</td></tr>
+            <tr><td>地名</td><td><span class="source ginza">GiNZA</span></td><td>都道府県・市区町村接尾辞</td><td>GiNZAの誤分類を日本語の地名構造で補います。</td></tr>
+            <tr><td>住所</td><td><span class="source rules">日本固有ルール</span></td><td>都道府県、市区町村、丁目・番・号</td><td>GiNZAの断片NERではなく、住所全体のスパンを確定します。</td></tr>
+            <tr><td>電話・郵便番号</td><td><span class="source pattern">Presidio Pattern</span></td><td>等長正規化、型番・商品コード否定文脈</td><td>形式は決定的に抽出し、文脈で誤検出を抑えます。</td></tr>
+            <tr><td>メール・URL</td><td><span class="source pattern">Presidio Pattern</span></td><td>URL終端トリム、メール断片のNER除外</td><td>GiNZAの推定ラベルを採用せず、構文を優先します。</td></tr>
+            <tr><td>IPアドレス</td><td><span class="source rules">日本固有ルール</span></td><td><code>ipaddress</code>による構文検証</td><td>IPv4・IPv6を検証し、日本語隣接文字を境界にしません。</td></tr>
+            <tr><td>カード</td><td><span class="source rules">日本固有ルール</span></td><td>Luhnチェック</td><td>桁数だけでなくチェックサムを必須にします。</td></tr>
+            <tr><td>個人番号・免許・口座</td><td><span class="source rules">日本固有ルール</span></td><td>「個人番号」「免許証」「口座」などの文脈</td><td>同じ桁数の一般番号との衝突を抑えます。</td></tr>
+            <tr><td>ユーザー登録語</td><td><span class="source dictionary">PII辞書</span></td><td>完全一致、最優先</td><td>社内固有語をモデル変更なしで即時反映します。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="sequence" aria-labelledby="sequence-title">
+      <h2 id="sequence-title">1件の入力を処理する順序</h2>
+      <div class="card-grid">
+        <article class="card"><span class="number">1</span><h3>読込・分割</h3><p>文書形式ごとに本文、表、ヘッダー、フッター、ノートなどをブロック化します。</p></article>
+        <article class="card"><span class="number">2</span><h3>検出用正規化</h3><p>文字数を変えない変換だけを適用し、元ファイルへの書戻し位置を壊しません。</p></article>
+        <article class="card"><span class="number">3</span><h3>候補生成</h3><p>GiNZA、Presidio、日本固有ルール、辞書を実行して共通Candidateへ変換します。</p></article>
+        <article class="card"><span class="number">4</span><h3>検証・重複解決</h3><p>チェックサム、否定文脈、構文検証を行い、重なる候補から優先候補を残します。</p></article>
+        <article class="card"><span class="number">5</span><h3>人によるレビュー</h3><p>自動検出を確定処理にせず、採用候補と追加マスクを利用者が決定します。</p></article>
+        <article class="card"><span class="number">6</span><h3>書戻し・検証</h3><p>採用IDだけをマスクし、元形式で出力します。PDFは復元可能性を別途検証します。</p></article>
+      </div>
+    </section>
+
+    <section id="files" aria-labelledby="files-title">
+      <h2 id="files-title">文書形式ごとの処理</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>形式</th><th>読取単位</th><th>マスク方法</th><th>注意点</th></tr></thead>
+          <tbody>
+            <tr><td>テキスト</td><td>文字列</td><td>採用スパンを後方から置換</td><td>文字位置を直接利用できます。</td></tr>
+            <tr><td>DOCX</td><td>段落、run、表、ヘッダー、フッター</td><td>文書構造を維持してrunへ書戻し</td><td>複数runに分割されたPIIもブロックとして扱います。</td></tr>
+            <tr><td>PPTX</td><td>テキスト枠、表、グループ、ノート</td><td>shape内のrunへ書戻し</td><td>未対応オブジェクトは制約として明示します。</td></tr>
+            <tr><td>PDF</td><td>デコード可能なテキスト演算子</td><td>コンテンツストリーム内の文字列を置換</td><td>スキャンPDFと複雑な字形分割は現在の制約です。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="security" aria-labelledby="security-title">
+      <h2 id="security-title">ローカル処理とデータ境界</h2>
+      <div class="security">
+        <strong>PII本文は外部サービスへ送信しません。</strong>
+        ブラウザはローカルのFastAPIとだけ通信し、GiNZAモデルと辞書はDockerイメージ内に固定します。
+        実行時のモデルダウンロード、外部API、CDN、テレメトリーは使用しません。
+      </div>
+      <div class="callout-grid" style="margin-top: 1rem;">
+        <article class="card"><h3>一時文書</h3><p>文書セッションはローカルデータディレクトリで管理します。運用時は保存期間と削除方針を設定します。</p></article>
+        <article class="card"><h3>ユーザー辞書</h3><p>SQLiteへローカル保存し、検出時に読み込んで他の候補と統合します。</p></article>
+        <article class="card"><h3>監査可能性</h3><p>各Findingに<code>source</code>と<code>score</code>を保持し、どの検出器が候補を作ったか追跡できます。</p></article>
+      </div>
+    </section>
+
+    <section id="limits" aria-labelledby="limits-title">
+      <h2 id="limits-title">精度評価と現在の制約</h2>
+      <details open>
+        <summary>ベンチマーク結果の読み方</summary>
+        <p>
+          <code>synthetic-v1</code>は既知形式の回帰を検知するための合成データです。
+          このセットで100%でも実文書に対する精度100%を意味しません。公開前には、
+          実運用ドメインから独立に作成した人手レビュー済みホールドアウトデータで評価します。
+        </p>
+      </details>
+      <details>
+        <summary>自動検出は確定処理ではない</summary>
+        <p>PII検出には見逃しと誤検出があり得るため、出力前のレビュー工程を必須とします。</p>
+      </details>
+      <details>
+        <summary>PDFと画像</summary>
+        <p>スキャンPDFや画像内文字にはOCRが必要です。テキストPDFでも複数演算子に分割された文字列は追加対応が必要です。</p>
+      </details>
+      <details>
+        <summary>Officeの特殊オブジェクト</summary>
+        <p>マクロ、埋込ファイル、SmartArt、チャート、任意XML拡張は現時点の完全処理対象ではありません。</p>
+      </details>
+    </section>
+
+    <section aria-labelledby="commands-title">
+      <h2 id="commands-title">再現用コマンド</h2>
+      <pre><code>python -m pytest -q
+python -m benchmarks.run --output build/benchmark-report.json
+python scripts/check_licenses.py
+docker compose up --build</code></pre>
+    </section>
+
+    <footer>
+      <p>Kotoba Veil — システム構成は実装とベンチマークの変更に合わせて更新してください。</p>
+    </footer>
+  </main>
+</body>
+</html>
