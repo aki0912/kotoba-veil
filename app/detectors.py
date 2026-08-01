@@ -507,6 +507,36 @@ def _passes_luhn(digits: str) -> bool:
 
 
 def apply_mask(text: str, findings: Iterable[Finding], accepted_ids: set[str], mask: str) -> str:
+    return _apply_replacements(
+        text,
+        findings,
+        accepted_ids,
+        lambda finding: mask * (finding.end - finding.start),
+    )
+
+
+def apply_entity_labels(
+    text: str,
+    findings: Iterable[Finding],
+    accepted_ids: set[str],
+    labels: dict[str, str],
+) -> str:
+    """Replace accepted spans with non-sensitive, human-readable entity labels."""
+
+    return _apply_replacements(
+        text,
+        findings,
+        accepted_ids,
+        lambda finding: f"[{labels.get(finding.entity_type, finding.entity_type)}]",
+    )
+
+
+def _apply_replacements(
+    text: str,
+    findings: Iterable[Finding],
+    accepted_ids: set[str],
+    replacement,
+) -> str:
     selected = sorted(
         (finding for finding in findings if finding.id in accepted_ids),
         key=lambda finding: finding.start,
@@ -514,7 +544,7 @@ def apply_mask(text: str, findings: Iterable[Finding], accepted_ids: set[str], m
     )
     output = text
     for finding in selected:
-        if finding.start < 0 or finding.end > len(output) or finding.end <= finding.start:
+        if finding.start < 0 or finding.end > len(text) or finding.end <= finding.start:
             continue
-        output = output[: finding.start] + mask * (finding.end - finding.start) + output[finding.end :]
+        output = output[: finding.start] + replacement(finding) + output[finding.end :]
     return output

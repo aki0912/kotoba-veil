@@ -5,6 +5,7 @@ const state = {
   analysis: null,
   accepted: new Set(),
   file: null,
+  settingsSelectionSnapshot: "",
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -23,8 +24,11 @@ const elements = {
   analyzeButton: $("#analyze-button"),
   clearButton: $("#clear-button"),
   reviewSection: $("#review-section"),
+  reviewEmpty: $("#review-empty"),
+  reviewContent: $("#review-content"),
   reviewSummary: $("#review-summary"),
   preview: $("#highlight-preview"),
+  entityLegend: $("#entity-legend"),
   findingList: $("#finding-list"),
   acceptedCount: $("#accepted-count"),
   exportButton: $("#export-button"),
@@ -36,6 +40,12 @@ const elements = {
   dictionaryType: $("#dictionary-type"),
   dictionaryNote: $("#dictionary-note"),
   dictionaryList: $("#dictionary-list"),
+  settingsDialog: $("#settings-dialog"),
+  openSettings: $("#open-settings"),
+  closeSettings: $("#close-settings"),
+  applySettings: $("#apply-settings"),
+  selectedEntityCount: $("#selected-entity-count"),
+  dialogSelectionSummary: $("#dialog-selection-summary"),
   toast: $("#toast"),
 };
 
@@ -120,10 +130,16 @@ function renderEntities() {
 
 function updateToggleAll() {
   elements.toggleAll.textContent = state.selectedEntities.size ? "すべて解除" : "すべて選択";
+  elements.selectedEntityCount.textContent = state.selectedEntities.size;
+  elements.dialogSelectionSummary.textContent = `${state.selectedEntities.size} / ${state.entities.length}種類を検出`;
 }
 
 function entityLabel(id) {
   return state.entities.find((item) => item.id === id)?.label || id;
+}
+
+function entityClass(id) {
+  return `entity-${String(id).toLowerCase().replaceAll("_", "-")}`;
 }
 
 async function analyze() {
@@ -153,8 +169,9 @@ async function analyze() {
     state.analysis = analysis;
     state.accepted = new Set(analysis.findings.map((finding) => finding.id));
     renderReview();
-    elements.reviewSection.hidden = false;
-    elements.reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      elements.reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } catch (error) {
     showToast(error.message, true);
   } finally {
@@ -164,16 +181,22 @@ async function analyze() {
 
 function renderReview() {
   const findings = state.analysis?.findings || [];
+  elements.reviewEmpty.hidden = true;
+  elements.reviewContent.hidden = false;
   elements.reviewSummary.textContent = findings.length
-    ? `${findings.length}件の候補が見つかりました。チェックを外すとマスク対象から除外されます。`
-    : "候補は見つかりませんでした。PII辞書への追加も確認してください。";
+    ? `${findings.length}件を検出`
+    : "候補なし";
+  const visibleTypes = [...new Set(findings.map((finding) => finding.entity_type))];
+  elements.entityLegend.innerHTML = visibleTypes.map((type) =>
+    `<span class="legend-item ${entityClass(type)}">${escapeHtml(entityLabel(type))}</span>`
+  ).join("");
   elements.findingList.innerHTML = findings.length ? findings.map((finding) => `
-    <label class="finding-card" title="${escapeHtml(finding.text)}">
+    <label class="finding-card ${entityClass(finding.entity_type)}" title="${escapeHtml(finding.text)}">
       <span class="finding-toggle"><input type="checkbox" value="${finding.id}" ${state.accepted.has(finding.id) ? "checked" : ""}></span>
       <span>
         <strong>${escapeHtml(finding.text)}</strong>
         <span class="finding-meta">
-          <span class="entity-chip">${escapeHtml(entityLabel(finding.entity_type))}</span>
+          <span class="entity-chip ${entityClass(finding.entity_type)}">${escapeHtml(entityLabel(finding.entity_type))}</span>
           <span>信頼度 ${Math.round(finding.score * 100)}%</span>
           <span>${escapeHtml(finding.source)}</span>
         </span>
@@ -204,7 +227,8 @@ function renderPreview() {
     blockFindings.forEach((finding) => {
       html += escapeHtml(block.text.slice(cursor, finding.start));
       const accepted = state.accepted.has(finding.id);
-      html += `<mark class="${accepted ? "" : "rejected"}" title="${escapeHtml(entityLabel(finding.entity_type))}">${escapeHtml(block.text.slice(finding.start, finding.end))}</mark>`;
+      const label = escapeHtml(entityLabel(finding.entity_type));
+      html += `<mark class="${entityClass(finding.entity_type)} ${accepted ? "" : "rejected"}" title="${label}"><span class="mark-label">${label}</span>${escapeHtml(block.text.slice(finding.start, finding.end))}</mark>`;
       cursor = finding.end;
     });
     html += escapeHtml(block.text.slice(cursor));
@@ -233,6 +257,7 @@ async function exportMasked() {
           findings: state.analysis.findings,
           accepted_ids: [...state.accepted],
           mask_character: "█",
+          replacement_mode: "entity_label",
         }),
       });
       elements.maskedResult.textContent = result.masked_text;
@@ -262,7 +287,10 @@ async function exportMasked() {
 function clearAnalysis() {
   state.analysis = null;
   state.accepted.clear();
-  elements.reviewSection.hidden = true;
+  elements.reviewEmpty.hidden = false;
+  elements.reviewContent.hidden = true;
+  elements.reviewSummary.textContent = "未解析";
+  elements.entityLegend.innerHTML = "";
   elements.resultBox.hidden = true;
 }
 
@@ -349,6 +377,22 @@ elements.toggleAll.addEventListener("click", () => {
   state.selectedEntities = new Set(select ? state.entities.map((entity) => entity.id) : []);
   renderEntities();
 });
+elements.openSettings.addEventListener("click", () => {
+  state.settingsSelectionSnapshot = [...state.selectedEntities].sort().join(",");
+  elements.settingsDialog.showModal();
+});
+elements.closeSettings.addEventListener("click", () => elements.settingsDialog.close());
+elements.applySettings.addEventListener("click", () => elements.settingsDialog.close());
+elements.settingsDialog.addEventListener("click", (event) => {
+  if (event.target === elements.settingsDialog) elements.settingsDialog.close();
+});
+elements.settingsDialog.addEventListener("close", () => {
+  const currentSelection = [...state.selectedEntities].sort().join(",");
+  if (currentSelection !== state.settingsSelectionSnapshot && state.analysis) {
+    clearAnalysis();
+    showToast("検出設定を変更しました。もう一度解析してください。");
+  }
+});
 elements.analyzeButton.addEventListener("click", analyze);
 elements.clearButton.addEventListener("click", () => {
   elements.sourceText.value = "";
@@ -388,4 +432,3 @@ elements.dictionaryForm.addEventListener("submit", async (event) => {
 });
 
 initialize();
-

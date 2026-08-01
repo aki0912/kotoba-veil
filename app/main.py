@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.database import DictionaryStore
-from app.detectors import ENTITY_CATALOG, JapanesePiiEngine, apply_mask
+from app.detectors import ENTITY_CATALOG, JapanesePiiEngine, apply_entity_labels, apply_mask
 from app.documents import DocumentProcessor, DocumentSessionStore, UnsupportedDocumentError
 from app.models import (
     AnalyzeRequest,
@@ -83,6 +83,11 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
 @app.post("/api/mask", response_model=MaskResponse)
 def mask(request: MaskRequest) -> MaskResponse:
     accepted = set(request.accepted_ids)
+    if request.replacement_mode == "entity_label":
+        labels = {entity["id"]: entity["label"] for entity in ENTITY_CATALOG}
+        return MaskResponse(
+            masked_text=apply_entity_labels(request.text, request.findings, accepted, labels)
+        )
     return MaskResponse(
         masked_text=apply_mask(request.text, request.findings, accepted, request.mask_character)
     )

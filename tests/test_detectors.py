@@ -1,4 +1,4 @@
-from app.detectors import JapanesePiiEngine, _map_ginza_label, apply_mask
+from app.detectors import JapanesePiiEngine, _map_ginza_label, apply_entity_labels, apply_mask
 from app.models import DictionaryEntry
 
 
@@ -64,6 +64,23 @@ def test_mask_only_applies_accepted_findings() -> None:
     assert masked.startswith("a@example.jp")
     assert "b@example.jp" not in masked
     assert len(masked) == len(text)
+
+
+def test_entity_label_mask_explains_the_removed_value_without_leaking_it() -> None:
+    engine = JapanesePiiEngine()
+    text = "連絡先はtaro@example.jp、電話は090-1234-5678です"
+    findings = engine.analyze(text, ["EMAIL_ADDRESS", "PHONE_NUMBER"], [])
+
+    masked = apply_entity_labels(
+        text,
+        findings,
+        {finding.id for finding in findings},
+        {"EMAIL_ADDRESS": "メールアドレス", "PHONE_NUMBER": "電話番号"},
+    )
+
+    assert masked == "連絡先は[メールアドレス]、電話は[電話番号]です"
+    assert "taro@example.jp" not in masked
+    assert "090-1234-5678" not in masked
 
 
 def test_entity_selection_filters_results() -> None:

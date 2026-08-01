@@ -51,6 +51,7 @@ class MaskRequest(BaseModel):
     findings: list[Finding]
     accepted_ids: list[str]
     mask_character: str = Field(default="█", min_length=1, max_length=1)
+    replacement_mode: Literal["character", "entity_label"] = "character"
 
 
 class MaskResponse(BaseModel):
@@ -90,4 +91,3 @@ class DocumentMaskRequest(BaseModel):
 class DocumentMaskResponse(BaseModel):
     filename: str
     download_url: str
-

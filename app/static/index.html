@@ -10,113 +10,140 @@
 <body>
   <a class="skip-link" href="#workspace">メインコンテンツへ移動</a>
   <header class="app-header">
-    <div class="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.1 3.4 9.8 8 11 4.6-1.2 8-5.9 8-11V5l-8-3Zm0 4.1 4 1.5V11c0 3.1-1.8 6.2-4 7.3V6.1Z"/></svg>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Kotoba Veil ホーム">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.1 3.4 9.8 8 11 4.6-1.2 8-5.9 8-11V5l-8-3Zm0 4.1 4 1.5V11c0 3.1-1.8 6.2-4 7.3V6.1Z"/></svg>
+        </span>
+        <span><strong>Kotoba Veil</strong><small>日本語PIIマスキング</small></span>
+      </a>
+      <div class="header-actions">
+        <div class="local-badge"><span></span> ローカル処理</div>
+        <button id="open-settings" class="settings-button" type="button" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2-1.6-2-3.4-2.5 1a7.4 7.4 0 0 0-1.7-1L14.8 3h-4l-.4 2.8a7.4 7.4 0 0 0-1.7 1L6.2 5.7l-2 3.5 2.2 1.7a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2.2 1.7 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.8h4l.4-2.8a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5-2-1.6ZM12.8 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+          検出設定 <span id="selected-entity-count" class="settings-count">0</span>
+        </button>
+      </div>
     </div>
-    <div>
-      <p class="eyebrow">LOCAL PRIVACY WORKSPACE</p>
-      <h1>Kotoba Veil</h1>
-    </div>
-    <div class="local-badge"><span></span> 完全ローカル処理</div>
   </header>
 
   <main id="workspace" class="workspace">
-    <section class="intro" aria-labelledby="intro-title">
+    <section class="page-heading" aria-labelledby="intro-title">
       <div>
-        <p class="eyebrow">日本語 PII REVIEW</p>
-        <h2 id="intro-title">見つけて、確かめて、<br>安全に隠す。</h2>
+        <h1 id="intro-title">PIIを検出してレビュー</h1>
+        <p>原文と検出結果を見比べ、隠す情報を確認してから出力します。</p>
       </div>
-      <p>人名や住所、連絡先、識別番号を自動検出します。候補を一件ずつ確認し、承認した情報だけを元の文書形式でマスクできます。</p>
     </section>
 
     <div id="status-banner" class="status-banner" role="status" aria-live="polite">
       <span class="status-dot"></span><span id="status-text">エンジンを確認しています…</span>
     </div>
 
-    <section class="tool-grid">
-      <div class="main-panel">
+    <section class="comparison-shell" aria-label="PII解析ワークスペース">
+      <div class="workspace-toolbar">
         <div class="tabs" role="tablist" aria-label="入力形式">
           <button id="text-tab" class="tab active" role="tab" aria-selected="true" aria-controls="text-panel">テキスト</button>
           <button id="document-tab" class="tab" role="tab" aria-selected="false" aria-controls="document-panel">文書ファイル</button>
         </div>
-
-        <div id="text-panel" class="input-panel" role="tabpanel" aria-labelledby="text-tab">
-          <label for="source-text">解析するテキスト</label>
-          <textarea id="source-text" maxlength="500000" placeholder="例：山田太郎の連絡先は 090-1234-5678、メールは taro@example.jp です。"></textarea>
-          <div class="input-meta"><span>入力内容は外部へ送信されません</span><span id="char-count">0 / 500,000</span></div>
-        </div>
-
-        <div id="document-panel" class="input-panel" role="tabpanel" aria-labelledby="document-tab" hidden>
-          <label id="drop-zone" class="drop-zone" for="document-file">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 7 8h3v6h4V8h3l-5-5ZM5 13v6h14v-6h2v8H3v-8h2Z"/></svg>
-            <strong>文書を選択、またはドロップ</strong>
-            <span>DOCX・PPTX・PDF / 最大25MB</span>
-          </label>
-          <input id="document-file" class="visually-hidden" type="file" accept=".docx,.pptx,.pdf">
-          <div id="file-summary" class="file-summary" hidden></div>
-        </div>
-
-        <div class="action-row">
-          <button id="analyze-button" class="primary-button" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 16.5-4-4 2-2 2 2 7-7 2 2-9 9Z"/></svg>
-            PII候補を検出
-          </button>
-          <button id="clear-button" class="secondary-button" type="button">クリア</button>
-        </div>
+        <p><span class="privacy-dot"></span> 入力内容は外部へ送信されません</p>
       </div>
 
-      <aside class="settings-panel" aria-labelledby="entity-heading">
-        <div class="panel-heading">
-          <div><p class="eyebrow">FILTER</p><h3 id="entity-heading">検出するPII</h3></div>
-          <button id="toggle-all" class="text-button" type="button">すべて解除</button>
-        </div>
-        <div id="entity-options" class="entity-options" aria-busy="true"></div>
-      </aside>
+      <div class="comparison-grid">
+        <article class="source-pane" aria-labelledby="source-heading">
+          <div class="pane-heading">
+            <div><span class="step-number">1</span><h2 id="source-heading">解析する内容</h2></div>
+            <span id="char-count">0 / 500,000</span>
+          </div>
+
+          <div id="text-panel" class="input-panel" role="tabpanel" aria-labelledby="text-tab">
+            <label class="visually-hidden" for="source-text">解析するテキスト</label>
+            <textarea id="source-text" maxlength="500000" placeholder="例：山田太郎の連絡先は 090-1234-5678、メールは taro@example.jp です。"></textarea>
+          </div>
+
+          <div id="document-panel" class="input-panel" role="tabpanel" aria-labelledby="document-tab" hidden>
+            <label id="drop-zone" class="drop-zone" for="document-file">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 7 8h3v6h4V8h3l-5-5ZM5 13v6h14V8h3l-5-5ZM5 13v6h14v-6h2v8H3v-8h2Z"/></svg>
+              <strong>文書を選択、またはドロップ</strong>
+              <span>DOCX・PPTX・PDF / 最大25MB</span>
+            </label>
+            <input id="document-file" class="visually-hidden" type="file" accept=".docx,.pptx,.pdf">
+            <div id="file-summary" class="file-summary" hidden></div>
+          </div>
+
+          <div class="action-row">
+            <button id="analyze-button" class="primary-button" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 16.5-4-4 2-2 2 2 7-7 2 2-9 9Z"/></svg>
+              PII候補を検出
+            </button>
+            <button id="clear-button" class="secondary-button" type="button">クリア</button>
+          </div>
+        </article>
+
+        <article id="review-section" class="review-section" aria-labelledby="review-heading">
+          <div class="pane-heading review-pane-heading">
+            <div><span class="step-number">2</span><h2 id="review-heading">検出結果</h2></div>
+            <span id="review-summary">未解析</span>
+          </div>
+          <div id="review-empty" class="review-empty">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h3v16H5V5h3l1-2Zm1.2 2-.5 1h4.6l-.5-1h-3.6ZM7 8v11h10V8H7Zm2 2h6v2H9v-2Zm0 4h4v2H9v-2Z"/></svg>
+            <strong>検出結果がここに表示されます</strong>
+            <span>左側にテキストを入力して「PII候補を検出」を押してください。</span>
+          </div>
+          <div id="review-content" hidden>
+            <div class="review-controls">
+              <div id="entity-legend" class="entity-legend" aria-label="検出ラベルの凡例"></div>
+              <div class="review-actions">
+                <button id="accept-all" class="text-button" type="button">すべて承認</button>
+                <button id="reject-all" class="text-button" type="button">すべて解除</button>
+              </div>
+            </div>
+            <div id="highlight-preview" class="highlight-preview" tabindex="0" aria-label="ラベル付き検出箇所プレビュー"></div>
+            <div class="finding-heading"><h3>検出候補</h3><span>チェックを外すとマスクしません</span></div>
+            <div id="finding-list" class="finding-list"></div>
+            <div class="export-bar">
+              <div><strong id="accepted-count">0件をマスク</strong><span>承認した候補だけが出力に反映されます</span></div>
+              <button id="export-button" class="primary-button" type="button">マスク結果を作成</button>
+            </div>
+            <div id="result-box" class="result-box" hidden>
+              <div class="panel-heading">
+                <div><h3>ラベル付きマスク結果</h3><p>元の値を、情報の種類を示すラベルに置き換えました。</p></div>
+                <button id="copy-button" class="text-button" type="button">コピー</button>
+              </div>
+              <pre id="masked-result"></pre>
+            </div>
+          </div>
+        </article>
+      </div>
     </section>
 
-    <section id="review-section" class="review-section" aria-labelledby="review-heading" hidden>
-      <div class="review-header">
-        <div>
-          <p class="eyebrow">HUMAN REVIEW</p>
-          <h2 id="review-heading">検出結果を確認</h2>
-          <p id="review-summary"></p>
-        </div>
-        <div class="review-actions">
-          <button id="accept-all" class="secondary-button" type="button">すべて承認</button>
-          <button id="reject-all" class="secondary-button" type="button">すべて解除</button>
-        </div>
+    <details class="dictionary-panel">
+      <summary><span><strong>PII辞書</strong><small>固有の人名・プロジェクト名・機密語を完全一致で検出</small></span><span class="summary-action">管理する</span></summary>
+      <div class="dictionary-content" aria-labelledby="dictionary-heading">
+        <h2 id="dictionary-heading" class="visually-hidden">PII辞書</h2>
+        <form id="dictionary-form" class="dictionary-form">
+          <div><label for="dictionary-term">追加する語</label><input id="dictionary-term" required maxlength="200" placeholder="例：極秘プロジェクトA"></div>
+          <div><label for="dictionary-type">分類</label><select id="dictionary-type"></select></div>
+          <div><label for="dictionary-note">メモ</label><input id="dictionary-note" maxlength="500" placeholder="任意"></div>
+          <button class="secondary-button" type="submit">辞書に追加</button>
+        </form>
+        <div id="dictionary-list" class="dictionary-list"></div>
       </div>
-      <div class="review-layout">
-        <div id="highlight-preview" class="highlight-preview" tabindex="0" aria-label="検出箇所プレビュー"></div>
-        <div id="finding-list" class="finding-list"></div>
-      </div>
-      <div class="export-bar">
-        <div><strong id="accepted-count">0件をマスク</strong><span>承認した候補だけが出力に反映されます</span></div>
-        <button id="export-button" class="primary-button" type="button">マスク結果を作成</button>
-      </div>
-      <div id="result-box" class="result-box" hidden>
-        <div class="panel-heading"><h3>マスク結果</h3><button id="copy-button" class="text-button" type="button">コピー</button></div>
-        <pre id="masked-result"></pre>
-      </div>
-    </section>
-
-    <section class="dictionary-panel" aria-labelledby="dictionary-heading">
-      <div class="panel-heading">
-        <div><p class="eyebrow">CUSTOM TERMS</p><h2 id="dictionary-heading">PII辞書</h2></div>
-        <p>固有の人名・プロジェクト名・機密語を完全一致で検出します。</p>
-      </div>
-      <form id="dictionary-form" class="dictionary-form">
-        <div><label for="dictionary-term">追加する語</label><input id="dictionary-term" required maxlength="200" placeholder="例：極秘プロジェクトA"></div>
-        <div><label for="dictionary-type">分類</label><select id="dictionary-type"></select></div>
-        <div><label for="dictionary-note">メモ</label><input id="dictionary-note" maxlength="500" placeholder="任意"></div>
-        <button class="secondary-button" type="submit">辞書に追加</button>
-      </form>
-      <div id="dictionary-list" class="dictionary-list"></div>
-    </section>
+    </details>
   </main>
+
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="entity-heading">
+    <div class="dialog-header">
+      <div><p class="eyebrow">DETECTION SETTINGS</p><h2 id="entity-heading">検出するPII</h2><p>解析対象にする情報の種類を選択します。</p></div>
+      <button id="close-settings" class="icon-button" type="button" aria-label="検出設定を閉じる">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>
+      </button>
+    </div>
+    <div class="settings-toolbar"><span id="dialog-selection-summary">0件を検出</span><button id="toggle-all" class="text-button" type="button">すべて解除</button></div>
+    <div id="entity-options" class="entity-options" aria-busy="true"></div>
+    <div class="dialog-footer"><button id="apply-settings" class="primary-button" type="button">設定を適用</button></div>
+  </dialog>
 
   <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
   <script src="/app.js" defer></script>
 </body>
 </html>
-
