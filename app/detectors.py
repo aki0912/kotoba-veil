@@ -24,7 +24,6 @@ _DETECTION_TRANSLATION = str.maketrans(
         "—": "-",
         "―": "-",
         "−": "-",
-        "ー": "-",
         "　": " ",
     }
 )
@@ -110,29 +109,54 @@ class GinzaDetector:
         candidates: list[Candidate] = []
         for entity in document.ents:
             mapped = _map_ginza_label(entity.label_)
-            if mapped:
+            if mapped and not _inside_email_like_token(
+                text,
+                entity.start_char,
+                entity.end_char,
+            ):
                 candidates.append(
                     Candidate(mapped, entity.start_char, entity.end_char, 0.82, "ginza")
                 )
         return candidates
 
 
+def _inside_email_like_token(text: str, start: int, end: int) -> bool:
+    token_characters = re.compile(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~@-]")
+    token_start = start
+    token_end = end
+    while token_start > 0 and token_characters.fullmatch(text[token_start - 1]):
+        token_start -= 1
+    while token_end < len(text) and token_characters.fullmatch(text[token_end]):
+        token_end += 1
+    return "@" in text[token_start:token_end]
+
+
 def _map_ginza_label(label: str) -> str | None:
     normalized = label.upper().replace("-", "_")
-    if "PERSON" in normalized or normalized in {"PER", "PET_NAME"}:
+    if normalized in {"PERSON", "PER"}:
         return "PERSON"
-    if "ORGANIZATION" in normalized or normalized in {"ORG", "COMPANY"}:
+    if normalized in {
+        "ORG",
+        "COMPANY",
+        "ORGANIZATION_OTHER",
+        "POLITICAL_ORGANIZATION_OTHER",
+        "PRO_SPORTS_ORGANIZATION",
+        "SHOW_ORGANIZATION",
+        "SCHOOL",
+        "RESEARCH_INSTITUTE",
+        "GOVERNMENT",
+        "INTERNATIONAL_ORGANIZATION",
+    }:
         return "ORGANIZATION"
-    if normalized in {"PHONE", "PHONE_NUMBER"}:
-        return "PHONE_NUMBER"
-    if normalized in {"EMAIL", "EMAIL_ADDRESS"}:
-        return "EMAIL_ADDRESS"
-    if normalized == "URL":
-        return "URL"
-    if any(part in normalized for part in ("CITY", "PROVINCE", "COUNTRY", "LOCATION", "GPE", "LOC")):
+    if normalized in {
+        "CITY",
+        "PROVINCE",
+        "COUNTRY",
+        "COUNTY",
+        "GPE_OTHER",
+        "LOCATION_OTHER",
+    }:
         return "LOCATION"
-    if normalized in {"DATE", "TIME", "DATE_TIME"}:
-        return "DATE_TIME"
     return None
 
 
@@ -160,14 +184,14 @@ class JapanesePiiEngine:
             "POSTAL_CODE": [
                 Pattern(
                     "jp-postal",
-                    r"(?<!\d)(?:〒\s*)?\d{3}-?\d{4}(?!\d|-\d)",
+                    r"(?<!\d)(?:〒\s*)?\d{3}[-ー]?\d{4}(?!\d|[-ー]\d)",
                     0.88,
                 )
             ],
             "PHONE_NUMBER": [
                 Pattern(
                     "jp-phone",
-                    r"(?<!\d)(?:(?:\+81[-\s]?(?:0)?\d{1,4})|(?:0\d{1,4})|(?:\(0\d{1,4}\)))[-\s]?\d{1,4}[-\s]?\d{3,4}(?!\d)",
+                    r"(?<!\d)(?:(?:\+81[-ー\s]?(?:0)?\d{1,4})|(?:0\d{1,4})|(?:\(0\d{1,4}\)))[-ー\s]?\d{1,4}[-ー\s]?\d{3,4}(?!\d)",
                     0.78,
                 )
             ],
@@ -218,8 +242,8 @@ class JapanesePiiEngine:
         else:
             fallback = {
                 "EMAIL_ADDRESS": r"(?<![A-Za-z0-9.!#$%&'*+/=?^`{|}~-])[A-Za-z0-9.!#$%&'*+/=?^`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+",
-                "POSTAL_CODE": r"(?<!\d)(?:〒\s*)?\d{3}-?\d{4}(?!\d|-\d)",
-                "PHONE_NUMBER": r"(?<!\d)(?:(?:\+81[-\s]?(?:0)?\d{1,4})|(?:0\d{1,4})|(?:\(0\d{1,4}\)))[-\s]?\d{1,4}[-\s]?\d{3,4}(?!\d)",
+                "POSTAL_CODE": r"(?<!\d)(?:〒\s*)?\d{3}[-ー]?\d{4}(?!\d|[-ー]\d)",
+                "PHONE_NUMBER": r"(?<!\d)(?:(?:\+81[-ー\s]?(?:0)?\d{1,4})|(?:0\d{1,4})|(?:\(0\d{1,4}\)))[-ー\s]?\d{1,4}[-ー\s]?\d{3,4}(?!\d)",
                 "URL": r"https?://[^\s<>()\[\]{}、。]+",
             }
             for entity, expression in fallback.items():
@@ -240,7 +264,7 @@ class JapanesePiiEngine:
             r"(?:東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
             r"[^\s、。;；]{1,60}?"
             rf"(?:(?:{number}(?:丁目|番地?|番|号)){{1,4}}|"
-            rf"{number}(?:-{number}){{1,3}})"
+            rf"{number}(?:[-ー]{number}){{1,3}})"
         )
         candidates.extend(
             Candidate("ADDRESS", match.start(), match.end(), 0.76, "jp-address-rule")
@@ -257,6 +281,7 @@ class JapanesePiiEngine:
         )
 
         candidates.extend(self._contextual_number_candidates(detection_text))
+        candidates.extend(self._contextual_named_entity_candidates(detection_text))
         candidates.extend(self._credit_card_candidates(detection_text))
         candidates.extend(self._ip_candidates(detection_text))
         return candidates
@@ -281,7 +306,9 @@ class JapanesePiiEngine:
         ):
             return None
         if candidate.entity_type == "POSTAL_CODE":
-            has_postal_signal = "〒" in value or "-" in value or "郵便" in context
+            has_postal_signal = (
+                "〒" in value or "-" in value or "ー" in value or "郵便" in context
+            )
             if not has_postal_signal:
                 return None
         if candidate.entity_type == "URL":
@@ -300,6 +327,67 @@ class JapanesePiiEngine:
                 candidate.source,
             )
         return candidate
+
+    @staticmethod
+    def _contextual_named_entity_candidates(text: str) -> list[Candidate]:
+        candidates: list[Candidate] = []
+        person_pattern = re.compile(
+            r"(?:氏名|担当者|申請者|登録値|確認対象|申請書|記録された値)"
+            r"(?:には|は|[:：])?\s*"
+            r"(?P<person>"
+            r"(?:[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){1,2})"
+            r"|(?:[一-龯々髙﨑]{2,8})"
+            r"|(?:[ぁ-ゖー]{4,12})"
+            r"|(?:[ァ-ヶー]{4,16})"
+            r")(?=さん|様|氏|先生)"
+        )
+        for match in person_pattern.finditer(text):
+            candidates.append(
+                Candidate(
+                    "PERSON",
+                    match.start("person"),
+                    match.end("person"),
+                    0.86,
+                    "jp-person-context-rule",
+                )
+            )
+
+        organization_pattern = re.compile(
+            r"(?:登録値|確認対象|申請書|記録された値)(?:には|は|[:：])?\s*"
+            r"(?P<organization>"
+            r"(?:株式会社|合同会社|有限会社|一般社団法人|一般財団法人|"
+            r"医療法人|学校法人|社会福祉法人)"
+            r"[^\s、。;；／]{1,30}?"
+            r"|[一-龯々ぁ-ゖァ-ヶーA-Za-z0-9・&＆]{2,30}?"
+            r"(?:研究所|大学|病院|協会|財団|銀行|支店)[0-9]{0,4}"
+            r")(?=です|でした|である|／|、|。|$)"
+        )
+        for match in organization_pattern.finditer(text):
+            candidates.append(
+                Candidate(
+                    "ORGANIZATION",
+                    match.start("organization"),
+                    match.end("organization"),
+                    0.86,
+                    "jp-organization-context-rule",
+                )
+            )
+
+        location_pattern = re.compile(
+            r"(?P<location>[一-龯々]{1,8}(?:都|道|府|県|市|区|町|村))"
+            r"(?=が配送地域|の会場|への出張|を担当|から届)"
+        )
+        for match in location_pattern.finditer(text):
+            candidates.append(
+                Candidate(
+                    "LOCATION",
+                    match.start("location"),
+                    match.end("location"),
+                    0.84,
+                    "jp-location-context-rule",
+                )
+            )
+        return candidates
 
     @staticmethod
     def _contextual_number_candidates(text: str) -> list[Candidate]:
@@ -366,6 +454,9 @@ class JapanesePiiEngine:
             "local-pattern": 3,
             "jp-address-rule": 3,
             "date-rule": 3,
+            "jp-person-context-rule": 3,
+            "jp-organization-context-rule": 3,
+            "jp-location-context-rule": 3,
             "ginza": 2,
         }
         ranked = sorted(

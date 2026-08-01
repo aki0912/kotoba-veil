@@ -1,4 +1,4 @@
-from app.detectors import JapanesePiiEngine, apply_mask
+from app.detectors import JapanesePiiEngine, _map_ginza_label, apply_mask
 from app.models import DictionaryEntry
 
 
@@ -157,5 +157,68 @@ def test_number_shaped_product_identifiers_are_not_contact_details() -> None:
     text = "型番090-1005-2005と商品コード4000097を出荷しました。"
 
     findings = engine.analyze(text, ["PHONE_NUMBER", "POSTAL_CODE"], [])
+
+    assert findings == []
+
+
+def test_ginza_mapping_only_accepts_named_entity_labels() -> None:
+    assert _map_ginza_label("Person") == "PERSON"
+    assert _map_ginza_label("Company") == "ORGANIZATION"
+    assert _map_ginza_label("Research_Institute") == "ORGANIZATION"
+    assert _map_ginza_label("City") == "LOCATION"
+    assert _map_ginza_label("N_Person") is None
+    assert _map_ginza_label("N_Organization") is None
+    assert _map_ginza_label("Date") is None
+    assert _map_ginza_label("Phone_Number") is None
+    assert _map_ginza_label("URL") is None
+
+
+def test_context_rules_complete_person_name_variants() -> None:
+    engine = JapanesePiiEngine()
+    cases = [
+        ("申請書にはさとうたろうさんです。", "さとうたろう"),
+        ("確認対象はカトウイチロウさんです。", "カトウイチロウ"),
+        ("記録された値はMisaki Itoさんです。", "Misaki Ito"),
+    ]
+
+    for text, expected in cases:
+        findings = engine.analyze(text, ["PERSON"], [])
+        assert [finding.text for finding in findings] == [expected]
+        assert findings[0].source == "jp-person-context-rule"
+
+
+def test_context_rules_complete_organization_names() -> None:
+    engine = JapanesePiiEngine()
+    cases = [
+        "株式会社青空1",
+        "合同会社ことのは2",
+        "一般社団法人みらい3",
+        "東都データ研究所4",
+        "医療法人さくら会5",
+    ]
+
+    for expected in cases:
+        findings = engine.analyze(f"確認対象は{expected}です。", ["ORGANIZATION"], [])
+        assert [finding.text for finding in findings] == [expected]
+        assert findings[0].source == "jp-organization-context-rule"
+
+
+def test_location_suffix_rule_recovers_ginza_misclassification() -> None:
+    engine = JapanesePiiEngine()
+
+    findings = engine.analyze("申請書には那覇市が配送地域です。", ["LOCATION"], [])
+
+    assert [finding.text for finding in findings] == ["那覇市"]
+    assert findings[0].source == "jp-location-context-rule"
+
+
+def test_ginza_candidates_inside_invalid_email_are_suppressed() -> None:
+    engine = JapanesePiiEngine()
+
+    findings = engine.analyze(
+        "入力値user31@localhostはメールではありません。",
+        ["PERSON", "ORGANIZATION", "LOCATION"],
+        [],
+    )
 
     assert findings == []
