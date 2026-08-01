@@ -11,16 +11,26 @@ from fastapi.staticfiles import StaticFiles
 from app.database import DictionaryStore
 from app.detectors import ENTITY_CATALOG, JapanesePiiEngine, apply_entity_labels, apply_mask
 from app.documents import DocumentProcessor, DocumentSessionStore, UnsupportedDocumentError
+from app.manual_findings import (
+    ManualFindingError,
+    ManualFindingOverlapError,
+    create_manual_findings,
+)
 from app.models import (
     AnalyzeRequest,
     AnalyzeResponse,
     DictionaryCreate,
     DictionaryEntry,
     DocumentAnalyzeResponse,
+    DocumentBlock,
     DocumentMaskRequest,
     DocumentMaskResponse,
+    Finding,
+    ManualFindingOptions,
+    ManualFindingResponse,
     MaskRequest,
     MaskResponse,
+    TextManualFindingRequest,
 )
 
 
@@ -93,6 +103,14 @@ def mask(request: MaskRequest) -> MaskResponse:
     )
 
 
+@app.post("/api/findings/manual", response_model=ManualFindingResponse)
+def create_text_manual_finding(
+    request: TextManualFindingRequest,
+) -> ManualFindingResponse:
+    blocks = [DocumentBlock(id="text", text=request.text)]
+    return _create_manual_finding_response(blocks, request.findings, request)
+
+
 @app.get("/api/dictionary", response_model=list[DictionaryEntry])
 def list_dictionary() -> list[DictionaryEntry]:
     return dictionary_store.list()
@@ -146,6 +164,50 @@ async def analyze_document(
 
 
 @app.post(
+    "/api/documents/{session_id}/findings/manual",
+    response_model=ManualFindingResponse,
+)
+def create_document_manual_finding(
+    session_id: str,
+    request: ManualFindingOptions,
+) -> ManualFindingResponse:
+    try:
+        _, blocks, findings = session_store.load(session_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="文書セッションが見つかりません。") from error
+    response = _create_manual_finding_response(blocks, findings, request)
+    merged = sorted(
+        [*findings, *response.added_findings],
+        key=lambda finding: (finding.block_id, finding.start, finding.end),
+    )
+    session_store.save_analysis(session_id, blocks, merged)
+    return response
+
+
+@app.delete(
+    "/api/documents/{session_id}/findings/{finding_id}",
+    status_code=204,
+    response_class=Response,
+)
+def delete_document_manual_finding(session_id: str, finding_id: str) -> Response:
+    try:
+        _, blocks, findings = session_store.load(session_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="文書セッションが見つかりません。") from error
+    target = next((finding for finding in findings if finding.id == finding_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="検出候補が見つかりません。")
+    if target.source != "manual-selection":
+        raise HTTPException(status_code=400, detail="自動検出された候補は削除できません。")
+    session_store.save_analysis(
+        session_id,
+        blocks,
+        [finding for finding in findings if finding.id != finding_id],
+    )
+    return Response(status_code=204)
+
+
+@app.post(
     "/api/documents/{session_id}/mask",
     response_model=DocumentMaskResponse,
 )
@@ -178,6 +240,36 @@ def download_document(session_id: str) -> FileResponse:
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="出力ファイルが見つかりません。") from error
     return FileResponse(output, filename=f"masked_{metadata['original_filename']}")
+
+
+def _create_manual_finding_response(
+    blocks: list[DocumentBlock],
+    existing_findings: list[Finding],
+    options: ManualFindingOptions,
+) -> ManualFindingResponse:
+    try:
+        result = create_manual_findings(blocks, list(existing_findings), options)
+    except ManualFindingOverlapError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ManualFindingError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    dictionary_status = "not_requested"
+    if options.save_to_dictionary:
+        _, created = dictionary_store.get_or_create(
+            DictionaryCreate(
+                term=result.selected_term,
+                entity_type=options.entity_type,
+                note="レビュー画面から登録",
+            )
+        )
+        dictionary_status = "created" if created else "already_exists"
+    return ManualFindingResponse(
+        added_findings=result.added_findings,
+        added_count=len(result.added_findings),
+        skipped_count=result.skipped_count,
+        dictionary_status=dictionary_status,
+    )
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

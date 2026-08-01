@@ -10,6 +10,8 @@ recognizers, Japanese-specific rules, and a user-managed PII dictionary.
   contact details, identifiers, financial information, dates, URLs, IP
   addresses, and custom dictionary terms.
 - Human review with per-candidate acceptance and rejection before masking.
+- Manual findings from text selections, with per-occurrence or all-match scope
+  and optional persistence in the local PII dictionary.
 - Text, DOCX, PPTX, and text-based PDF input and output.
 - DOCX paragraph, table, header, and footer traversal; PPTX text frame, table,
   grouped shape, and notes traversal.

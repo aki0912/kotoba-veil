@@ -58,6 +58,27 @@ class MaskResponse(BaseModel):
     masked_text: str
 
 
+class ManualFindingOptions(BaseModel):
+    block_id: str = Field(min_length=1, max_length=500)
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+    entity_type: str
+    scope: Literal["single", "all"] = "single"
+    save_to_dictionary: bool = False
+
+
+class TextManualFindingRequest(ManualFindingOptions):
+    text: str = Field(max_length=500_000)
+    findings: list[Finding] = Field(default_factory=list)
+
+
+class ManualFindingResponse(BaseModel):
+    added_findings: list[Finding]
+    added_count: int
+    skipped_count: int
+    dictionary_status: Literal["not_requested", "created", "already_exists"]
+
+
 class DictionaryCreate(BaseModel):
     term: str = Field(min_length=1, max_length=200)
     entity_type: str = "CUSTOM"

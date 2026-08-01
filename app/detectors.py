@@ -56,7 +56,7 @@ ENTITY_CATALOG = [
     {"id": "DATE_TIME", "label": "日付・時刻", "group": "その他"},
     {"id": "URL", "label": "URL", "group": "ネットワーク"},
     {"id": "IP_ADDRESS", "label": "IPアドレス", "group": "ネットワーク"},
-    {"id": "CUSTOM", "label": "PII辞書", "group": "ユーザー定義"},
+    {"id": "CUSTOM", "label": "ユーザー定義", "group": "ユーザー定義"},
 ]
 
 

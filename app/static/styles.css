@@ -294,6 +294,7 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
 
 .review-controls { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .review-actions { display: flex; flex: 0 0 auto; }
+.selection-hint { margin: 0 0 7px; color: var(--muted); font-size: .68rem; }
 .entity-legend { display: flex; min-width: 0; flex-wrap: wrap; gap: 5px; }
 .legend-item, .entity-chip {
   display: inline-flex;
@@ -321,6 +322,8 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 2.45;
+  cursor: text;
+  user-select: text;
 }
 .highlight-preview mark {
   position: relative;
@@ -332,7 +335,8 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-.mark-label {
+.highlight-preview mark::before {
+  content: attr(data-label);
   display: inline-block;
   margin-right: 4px;
   padding: 0 4px;
@@ -353,8 +357,37 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   text-decoration: none;
   opacity: 1;
 }
-.highlight-preview mark.rejected .mark-label { background: #475569; }
+.highlight-preview mark.rejected::before { background: #475569; }
+.preview-block { min-height: 1.5em; white-space: pre-wrap; }
+.pending-selection {
+  padding: 2px 1px;
+  border: 2px dotted #d97706;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #78350f;
+}
 .block-separator { display: block; margin: 13px 0 5px; color: var(--muted); font-size: .64rem; font-weight: 800; letter-spacing: .08em; }
+
+.manual-finding-form {
+  margin-top: 9px;
+  padding: 13px;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  background: #fffbeb;
+  box-shadow: 0 8px 20px rgba(146, 64, 14, .08);
+}
+.manual-selection-summary { display: flex; min-width: 0; align-items: center; gap: 8px; margin-bottom: 10px; }
+.manual-selection-summary > span { flex: 0 0 auto; padding: 2px 7px; border-radius: 99px; background: #f59e0b; color: #451a03; font-size: .64rem; font-weight: 850; }
+.manual-selection-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+.manual-finding-fields { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(245px, 1.2fr) auto; gap: 10px; align-items: end; }
+.manual-finding-fields label:not(.choice-control, .dictionary-choice), .manual-finding-fields legend { display: block; margin-bottom: 4px; font-size: .68rem; font-weight: 800; }
+.manual-finding-fields fieldset { display: flex; min-width: 0; gap: 7px; margin: 0; padding: 0; border: 0; }
+.manual-finding-fields legend { width: 100%; }
+.choice-control, .dictionary-choice { display: inline-flex; min-height: 44px; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 8px; background: white; font-size: .7rem; font-weight: 700; }
+.choice-control input, .dictionary-choice input { width: 17px; height: 17px; min-height: auto; accent-color: var(--primary); }
+.dictionary-choice { white-space: nowrap; }
+.manual-finding-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.manual-finding-error { margin: 8px 0 0; color: var(--danger); font-size: .72rem; font-weight: 750; }
 
 .finding-heading { display: flex; align-items: center; justify-content: space-between; margin: 15px 1px 8px; }
 .finding-heading h3 { margin: 0; font-size: .79rem; }
@@ -362,7 +395,7 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
 .finding-list { max-height: 270px; overflow: auto; padding-right: 3px; }
 .finding-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   padding: 10px 11px;
   border: 1px solid var(--line);
@@ -382,11 +415,15 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
 .finding-toggle input, .entity-option input { width: 18px; height: 18px; min-height: auto; accent-color: var(--entity-accent, var(--primary)); }
 .finding-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
 .finding-meta { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 3px; color: var(--muted); font-size: .67rem; }
+.manual-source-chip { color: #92400e; font-weight: 800; }
 .finding-state { margin-left: auto; font-weight: 800; }
 .state-masked { color: #166534; }
 .state-retained { display: none; color: #334155; }
 .finding-card:has(input:not(:checked)) .state-masked { display: none; }
 .finding-card:has(input:not(:checked)) .state-retained { display: inline; }
+.remove-manual-finding { display: grid; width: 44px; height: 44px; min-height: 44px; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--danger); }
+.remove-manual-finding:hover { background: #fee2e2; }
+.remove-manual-finding svg { width: 18px; fill: currentColor; }
 
 .export-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: #172033; color: white; }
 .export-bar strong, .export-bar span { display: block; }
@@ -460,6 +497,8 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   .comparison-grid { grid-template-columns: 1fr; }
   .source-pane { border-right: 0; border-bottom: 1px solid var(--line); }
   .dictionary-form { grid-template-columns: 1fr 1fr; }
+  .manual-finding-fields { grid-template-columns: 1fr 1.4fr; }
+  .dictionary-choice { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
@@ -474,6 +513,10 @@ textarea:hover, input:hover, select:hover { border-color: #7ca7be; }
   .input-panel, textarea, .drop-zone { min-height: 380px; }
   .action-row { display: grid; grid-template-columns: 1fr auto; }
   .review-controls { align-items: flex-start; flex-direction: column; }
+  .manual-finding-fields { grid-template-columns: 1fr; }
+  .manual-finding-fields fieldset { flex-direction: column; }
+  .dictionary-choice { grid-column: auto; }
+  .manual-finding-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .review-empty { min-height: 380px; }
   .export-bar { align-items: stretch; flex-direction: column; }
   .dictionary-panel summary small { display: none; }

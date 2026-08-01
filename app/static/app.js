@@ -6,6 +6,8 @@ const state = {
   accepted: new Set(),
   file: null,
   settingsSelectionSnapshot: "",
+  pendingSelection: null,
+  selectionTimer: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -28,6 +30,12 @@ const elements = {
   reviewContent: $("#review-content"),
   reviewSummary: $("#review-summary"),
   preview: $("#highlight-preview"),
+  manualFindingForm: $("#manual-finding-form"),
+  manualFindingHeading: $("#manual-finding-heading"),
+  manualEntityType: $("#manual-entity-type"),
+  manualSaveDictionary: $("#manual-save-dictionary"),
+  manualFindingError: $("#manual-finding-error"),
+  cancelManualFinding: $("#cancel-manual-finding"),
   entityLegend: $("#entity-legend"),
   findingList: $("#finding-list"),
   acceptedCount: $("#accepted-count"),
@@ -125,6 +133,9 @@ function renderEntities() {
     `<option value="${escapeHtml(entity.id)}">${escapeHtml(entity.label)}</option>`
   ).join("");
   elements.dictionaryType.value = "CUSTOM";
+  elements.manualEntityType.innerHTML = `<option value="">分類を選択</option>${state.entities.map((entity) =>
+    `<option value="${escapeHtml(entity.id)}">${escapeHtml(entity.label)}</option>`
+  ).join("")}`;
   updateToggleAll();
 }
 
@@ -140,6 +151,10 @@ function entityLabel(id) {
 
 function entityClass(id) {
   return `entity-${String(id).toLowerCase().replaceAll("_", "-")}`;
+}
+
+function sourceLabel(source) {
+  return source === "manual-selection" ? "手動追加" : source;
 }
 
 async function analyze() {
@@ -191,25 +206,32 @@ function renderReview() {
     `<span class="legend-item ${entityClass(type)}">${escapeHtml(entityLabel(type))}</span>`
   ).join("");
   elements.findingList.innerHTML = findings.length ? findings.map((finding) => `
-    <label class="finding-card ${entityClass(finding.entity_type)}" title="${escapeHtml(finding.text)}">
-      <span class="finding-toggle"><input type="checkbox" value="${finding.id}" ${state.accepted.has(finding.id) ? "checked" : ""}></span>
+    <div class="finding-card ${entityClass(finding.entity_type)} ${finding.source === "manual-selection" ? "manual-finding-card" : ""}" title="${escapeHtml(finding.text)}">
+      <label class="finding-toggle"><input type="checkbox" value="${finding.id}" aria-label="${escapeHtml(finding.text)}をマスク" ${state.accepted.has(finding.id) ? "checked" : ""}></label>
       <span>
         <strong>${escapeHtml(finding.text)}</strong>
         <span class="finding-meta">
           <span class="entity-chip ${entityClass(finding.entity_type)}">${escapeHtml(entityLabel(finding.entity_type))}</span>
           <span>信頼度 ${Math.round(finding.score * 100)}%</span>
-          <span>${escapeHtml(finding.source)}</span>
+          <span class="${finding.source === "manual-selection" ? "manual-source-chip" : ""}">${escapeHtml(sourceLabel(finding.source))}</span>
           <span class="finding-state"><span class="state-masked">マスク対象</span><span class="state-retained">原文を残す</span></span>
         </span>
       </span>
-    </label>`).join("") : '<div class="empty-state">検出候補はありません</div>';
-  elements.findingList.querySelectorAll("input").forEach((input) => {
+      ${finding.source === "manual-selection" ? `
+        <button class="remove-manual-finding" type="button" data-finding-id="${finding.id}" aria-label="${escapeHtml(finding.text)}の手動候補を削除">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 6V4h10v2h4v2h-2v12H5V8H3V6h4Zm2 0h6V5H9v1ZM7 8v10h10V8H7Zm3 2h2v6h-2v-6Zm4 0h2v6h-2v-6Z"/></svg>
+        </button>` : ""}
+    </div>`).join("") : '<div class="empty-state">検出候補はありません</div>';
+  elements.findingList.querySelectorAll('input[type="checkbox"]').forEach((input) => {
     input.addEventListener("change", () => {
       if (input.checked) state.accepted.add(input.value);
       else state.accepted.delete(input.value);
       renderPreview();
       updateAcceptedCount();
     });
+  });
+  elements.findingList.querySelectorAll(".remove-manual-finding").forEach((button) => {
+    button.addEventListener("click", () => removeManualFinding(button.dataset.findingId));
   });
   renderPreview();
   updateAcceptedCount();
@@ -220,31 +242,206 @@ function renderPreview() {
   const blocks = state.analysis?.blocks || [];
   const findings = state.analysis?.findings || [];
   elements.preview.innerHTML = blocks.map((block, index) => {
-    const blockFindings = findings
+    const segments = findings
       .filter((finding) => finding.block_id === block.id)
-      .sort((a, b) => a.start - b.start);
+      .map((finding) => ({ ...finding, kind: "finding" }));
+    if (state.pendingSelection?.block_id === block.id) {
+      segments.push({ ...state.pendingSelection, kind: "pending" });
+    }
+    segments.sort((a, b) => a.start - b.start || a.end - b.end);
+    const characters = Array.from(block.text);
     let cursor = 0;
     let html = "";
-    blockFindings.forEach((finding) => {
-      html += escapeHtml(block.text.slice(cursor, finding.start));
-      const accepted = state.accepted.has(finding.id);
-      const label = escapeHtml(entityLabel(finding.entity_type));
-      const statusLabel = accepted ? label : "原文を残す";
-      const title = accepted ? `${label}：マスク対象` : `${label}：マスクしない`;
-      html += `<mark class="${entityClass(finding.entity_type)} ${accepted ? "" : "rejected"}" title="${escapeHtml(title)}"><span class="mark-label">${statusLabel}</span>${escapeHtml(block.text.slice(finding.start, finding.end))}</mark>`;
-      cursor = finding.end;
+    segments.forEach((segment) => {
+      html += escapeHtml(characters.slice(cursor, segment.start).join(""));
+      const value = escapeHtml(characters.slice(segment.start, segment.end).join(""));
+      if (segment.kind === "pending") {
+        html += `<span class="pending-selection">${value}</span>`;
+      } else {
+        const accepted = state.accepted.has(segment.id);
+        const label = entityLabel(segment.entity_type);
+        const statusLabel = accepted ? label : "原文を残す";
+        const title = accepted ? `${label}：マスク対象` : `${label}：マスクしない`;
+        html += `<mark class="${entityClass(segment.entity_type)} ${accepted ? "" : "rejected"}" data-label="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(title)}：${value}">${value}</mark>`;
+      }
+      cursor = segment.end;
     });
-    html += escapeHtml(block.text.slice(cursor));
-    if (blocks.length > 1) {
-      return `<span class="block-separator">BLOCK ${index + 1}</span>${html}`;
-    }
-    return html;
-  }).join("\n");
+    html += escapeHtml(characters.slice(cursor).join(""));
+    const separator = blocks.length > 1
+      ? `<span class="block-separator">BLOCK ${index + 1}</span>`
+      : "";
+    return `${separator}<div class="preview-block" data-block-id="${escapeHtml(block.id)}">${html}</div>`;
+  }).join("");
+  renderManualFindingBar();
+}
+
+function renderManualFindingBar() {
+  const pending = state.pendingSelection;
+  elements.manualFindingForm.hidden = !pending;
+  if (!pending) {
+    elements.manualFindingError.hidden = true;
+    return;
+  }
+  elements.manualFindingHeading.textContent = `「${pending.text}」`;
+}
+
+function capturePreviewSelection() {
+  if (!state.analysis) return;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount !== 1) return;
+  const range = selection.getRangeAt(0);
+  const startBlock = previewBlockForNode(range.startContainer);
+  const endBlock = previewBlockForNode(range.endContainer);
+  if (!startBlock || !endBlock) return;
+  if (startBlock !== endBlock) {
+    showToast("複数の文書ブロックをまたぐ範囲は追加できません。", true);
+    return;
+  }
+
+  const blockId = startBlock.dataset.blockId;
+  const block = state.analysis.blocks.find((item) => item.id === blockId);
+  if (!block) return;
+  const start = codePointOffsetWithin(startBlock, range.startContainer, range.startOffset);
+  const end = codePointOffsetWithin(startBlock, range.endContainer, range.endOffset);
+  const characters = Array.from(block.text);
+  const rawText = characters.slice(start, end).join("");
+  const leadingText = rawText.match(/^\s*/u)?.[0] || "";
+  const trailingText = rawText.match(/\s*$/u)?.[0] || "";
+  const trimmedStart = start + Array.from(leadingText).length;
+  const trimmedEnd = end - Array.from(trailingText).length;
+  const text = characters.slice(trimmedStart, trimmedEnd).join("");
+
+  if (!text) {
+    showToast("空白だけの範囲は追加できません。", true);
+    return;
+  }
+  if (Array.from(text).length > 200) {
+    showToast("選択範囲は200文字以内にしてください。", true);
+    return;
+  }
+  const overlaps = state.analysis.findings.some((finding) =>
+    finding.block_id === blockId && trimmedStart < finding.end && trimmedEnd > finding.start
+  );
+  if (overlaps) {
+    showToast("すでに検出候補です。候補のチェックをONにしてください。", true);
+    return;
+  }
+
+  state.pendingSelection = {
+    block_id: blockId,
+    start: trimmedStart,
+    end: trimmedEnd,
+    text,
+  };
+  selection.removeAllRanges();
+  elements.manualFindingForm.reset();
+  elements.manualEntityType.value = "";
+  elements.manualFindingError.hidden = true;
+  renderPreview();
+}
+
+function previewBlockForNode(node) {
+  const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  return element?.closest(".preview-block") || null;
+}
+
+function codePointOffsetWithin(block, container, offset) {
+  const prefix = document.createRange();
+  prefix.selectNodeContents(block);
+  prefix.setEnd(container, offset);
+  return Array.from(prefix.toString()).length;
+}
+
+function clearPendingSelection() {
+  if (!state.pendingSelection) return;
+  state.pendingSelection = null;
+  window.getSelection()?.removeAllRanges();
+  renderPreview();
+}
+
+function showManualFindingError(message) {
+  elements.manualFindingError.textContent = message;
+  elements.manualFindingError.hidden = false;
 }
 
 function updateAcceptedCount() {
   elements.acceptedCount.textContent = `${state.accepted.size}件をマスク`;
   elements.exportButton.disabled = !state.analysis;
+}
+
+async function addManualFinding(event) {
+  event.preventDefault();
+  const pending = state.pendingSelection;
+  if (!pending || !state.analysis) return;
+  if (!elements.manualEntityType.value) {
+    showManualFindingError("PII分類を選択してください。");
+    elements.manualEntityType.focus();
+    return;
+  }
+
+  const submitButton = elements.manualFindingForm.querySelector('button[type="submit"]');
+  const options = {
+    block_id: pending.block_id,
+    start: pending.start,
+    end: pending.end,
+    entity_type: elements.manualEntityType.value,
+    scope: elements.manualFindingForm.elements.namedItem("manual-scope").value,
+    save_to_dictionary: elements.manualSaveDictionary.checked,
+  };
+  const path = state.mode === "text"
+    ? "/api/findings/manual"
+    : `/api/documents/${state.analysis.session_id}/findings/manual`;
+  const body = state.mode === "text"
+    ? { ...options, text: state.analysis.text, findings: state.analysis.findings }
+    : options;
+
+  submitButton.disabled = true;
+  submitButton.textContent = "追加中…";
+  elements.manualFindingError.hidden = true;
+  try {
+    const result = await api(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    state.analysis.findings = [...state.analysis.findings, ...result.added_findings];
+    result.added_findings.forEach((finding) => state.accepted.add(finding.id));
+    state.pendingSelection = null;
+    renderReview();
+    if (result.dictionary_status !== "not_requested") await loadDictionary();
+    const skipped = result.skipped_count
+      ? `（既存候補と重なる${result.skipped_count}件を除外）`
+      : "";
+    const dictionary = result.dictionary_status === "created"
+      ? " PII辞書にも保存しました。"
+      : result.dictionary_status === "already_exists"
+        ? " PII辞書には登録済みです。"
+        : "";
+    showToast(`${result.added_count}件をマスク候補に追加しました${skipped}。${dictionary}`.trim());
+  } catch (error) {
+    showManualFindingError(error.message);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "マスク候補に追加";
+  }
+}
+
+async function removeManualFinding(findingId) {
+  const finding = state.analysis?.findings.find((item) => item.id === findingId);
+  if (!finding || finding.source !== "manual-selection") return;
+  try {
+    if (state.mode === "document") {
+      await api(`/api/documents/${state.analysis.session_id}/findings/${findingId}`, {
+        method: "DELETE",
+      });
+    }
+    state.analysis.findings = state.analysis.findings.filter((item) => item.id !== findingId);
+    state.accepted.delete(findingId);
+    renderReview();
+    showToast("手動追加した候補を削除しました。");
+  } catch (error) {
+    showToast(error.message, true);
+  }
 }
 
 async function exportMasked() {
@@ -290,10 +487,13 @@ async function exportMasked() {
 function clearAnalysis() {
   state.analysis = null;
   state.accepted.clear();
+  state.pendingSelection = null;
+  window.clearTimeout(state.selectionTimer);
   elements.reviewEmpty.hidden = false;
   elements.reviewContent.hidden = true;
   elements.reviewSummary.textContent = "未解析";
   elements.entityLegend.innerHTML = "";
+  elements.manualFindingForm.hidden = true;
   elements.resultBox.hidden = true;
 }
 
@@ -375,6 +575,17 @@ elements.fileInput.addEventListener("change", () => setFile(elements.fileInput.f
   elements.dropZone.classList.remove("dragging");
 }));
 elements.dropZone.addEventListener("drop", (event) => setFile(event.dataTransfer.files[0]));
+document.addEventListener("selectionchange", () => {
+  window.clearTimeout(state.selectionTimer);
+  const selection = window.getSelection();
+  if (
+    !selection
+    || selection.isCollapsed
+    || !selection.anchorNode
+    || !elements.preview.contains(selection.anchorNode)
+  ) return;
+  state.selectionTimer = window.setTimeout(capturePreviewSelection, 180);
+});
 elements.toggleAll.addEventListener("click", () => {
   const select = state.selectedEntities.size === 0;
   state.selectedEntities = new Set(select ? state.entities.map((entity) => entity.id) : []);
@@ -411,6 +622,8 @@ $("#accept-all").addEventListener("click", () => {
 });
 $("#reject-all").addEventListener("click", () => { state.accepted.clear(); renderReview(); });
 elements.exportButton.addEventListener("click", exportMasked);
+elements.manualFindingForm.addEventListener("submit", addManualFinding);
+elements.cancelManualFinding.addEventListener("click", clearPendingSelection);
 elements.copyButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(elements.maskedResult.textContent);
   showToast("クリップボードにコピーしました。");
