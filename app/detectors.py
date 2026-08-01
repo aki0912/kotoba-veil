@@ -10,6 +10,31 @@ from typing import Iterable
 
 from app.models import DictionaryEntry, Finding
 
+
+_DETECTION_TRANSLATION = str.maketrans(
+    {
+        **{
+            chr(codepoint): chr(codepoint - 0xFEE0)
+            for codepoint in range(0xFF01, 0xFF5F)
+        },
+        "‐": "-",
+        "‑": "-",
+        "‒": "-",
+        "–": "-",
+        "—": "-",
+        "―": "-",
+        "−": "-",
+        "ー": "-",
+        "　": " ",
+    }
+)
+
+
+def _normalize_detection_text(text: str) -> str:
+    """Return a width-normalized, offset-preserving detection view."""
+
+    return text.translate(_DETECTION_TRANSLATION)
+
 try:
     from presidio_analyzer import Pattern, PatternRecognizer
 except ImportError:  # pragma: no cover - permits lightweight rule-only development
@@ -135,14 +160,14 @@ class JapanesePiiEngine:
             "POSTAL_CODE": [
                 Pattern(
                     "jp-postal",
-                    r"(?<!\d)(?:〒\s*)?\d{3}[-‐ー−]?\d{4}(?!\d|[-‐ー−]\d)",
+                    r"(?<!\d)(?:〒\s*)?\d{3}-?\d{4}(?!\d|-\d)",
                     0.88,
                 )
             ],
             "PHONE_NUMBER": [
                 Pattern(
                     "jp-phone",
-                    r"(?<!\d)(?:\+81[-\s]?(?:0)?|0)\d{1,4}[-‐ー−\s]?\d{1,4}[-‐ー−\s]?\d{3,4}(?!\d)",
+                    r"(?<!\d)(?:(?:\+81[-\s]?(?:0)?\d{1,4})|(?:0\d{1,4})|(?:\(0\d{1,4}\)))[-\s]?\d{1,4}[-\s]?\d{3,4}(?!\d)",
                     0.78,
                 )
             ],
@@ -171,50 +196,110 @@ class JapanesePiiEngine:
         return [self._to_finding(text, candidate, block_id) for candidate in selected]
 
     def _pattern_candidates(self, text: str) -> list[Candidate]:
+        detection_text = _normalize_detection_text(text)
         candidates: list[Candidate] = []
         if self._presidio_recognizers:
             for recognizer in self._presidio_recognizers:
-                results = recognizer.analyze(text=text, entities=[recognizer.supported_entities[0]])
-                candidates.extend(
-                    Candidate(result.entity_type, result.start, result.end, result.score, "presidio-pattern")
-                    for result in results
+                results = recognizer.analyze(
+                    text=detection_text,
+                    entities=[recognizer.supported_entities[0]],
                 )
+                for result in results:
+                    candidate = Candidate(
+                        result.entity_type,
+                        result.start,
+                        result.end,
+                        result.score,
+                        "presidio-pattern",
+                    )
+                    candidate = self._validate_pattern_candidate(detection_text, candidate)
+                    if candidate:
+                        candidates.append(candidate)
         else:
             fallback = {
                 "EMAIL_ADDRESS": r"(?<![A-Za-z0-9.!#$%&'*+/=?^`{|}~-])[A-Za-z0-9.!#$%&'*+/=?^`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+",
-                "POSTAL_CODE": r"(?<!\d)(?:〒\s*)?\d{3}[-‐ー−]?\d{4}(?!\d|[-‐ー−]\d)",
-                "PHONE_NUMBER": r"(?<!\d)(?:\+81[-\s]?(?:0)?|0)\d{1,4}[-‐ー−\s]?\d{1,4}[-‐ー−\s]?\d{3,4}(?!\d)",
+                "POSTAL_CODE": r"(?<!\d)(?:〒\s*)?\d{3}-?\d{4}(?!\d|-\d)",
+                "PHONE_NUMBER": r"(?<!\d)(?:(?:\+81[-\s]?(?:0)?\d{1,4})|(?:0\d{1,4})|(?:\(0\d{1,4}\)))[-\s]?\d{1,4}[-\s]?\d{3,4}(?!\d)",
                 "URL": r"https?://[^\s<>()\[\]{}、。]+",
             }
             for entity, expression in fallback.items():
-                candidates.extend(
-                    Candidate(entity, match.start(), match.end(), 0.85, "local-pattern")
-                    for match in re.finditer(expression, text, re.IGNORECASE)
-                )
+                for match in re.finditer(expression, detection_text, re.IGNORECASE):
+                    candidate = Candidate(
+                        entity,
+                        match.start(),
+                        match.end(),
+                        0.85,
+                        "local-pattern",
+                    )
+                    candidate = self._validate_pattern_candidate(detection_text, candidate)
+                    if candidate:
+                        candidates.append(candidate)
 
+        number = r"[0-9一二三四五六七八九十百千]+"
         address_pattern = re.compile(
             r"(?:東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
-            r"[^\s、。;；]{1,35}?(?:市|区|町|村)"
-            r"[^\s、。;；]{0,30}?(?:\d{1,4}|[０-９]{1,4}|[一二三四五六七八九十]{1,6})"
-            r"(?:丁目|番地?|番|号)?"
+            r"[^\s、。;；]{1,60}?"
+            rf"(?:(?:{number}(?:丁目|番地?|番|号)){{1,4}}|"
+            rf"{number}(?:-{number}){{1,3}})"
         )
         candidates.extend(
             Candidate("ADDRESS", match.start(), match.end(), 0.76, "jp-address-rule")
-            for match in address_pattern.finditer(text)
+            for match in address_pattern.finditer(detection_text)
         )
 
         date_pattern = re.compile(
-            r"(?<!\d)(?:(?:19|20)\d{2}[年/.-])?\d{1,2}[月/.-]\d{1,2}日?(?!\d)"
+            r"(?<!\d)(?:(?:19|20)\d{2}年)?\d{1,2}月\d{1,2}日(?!\d)"
+            r"|(?<!\d)(?:19|20)\d{2}([/.-])\d{1,2}\1\d{1,2}(?!\d)"
         )
         candidates.extend(
             Candidate("DATE_TIME", match.start(), match.end(), 0.72, "date-rule")
-            for match in date_pattern.finditer(text)
+            for match in date_pattern.finditer(detection_text)
         )
 
-        candidates.extend(self._contextual_number_candidates(text))
-        candidates.extend(self._credit_card_candidates(text))
-        candidates.extend(self._ip_candidates(text))
+        candidates.extend(self._contextual_number_candidates(detection_text))
+        candidates.extend(self._credit_card_candidates(detection_text))
+        candidates.extend(self._ip_candidates(detection_text))
         return candidates
+
+    @staticmethod
+    def _validate_pattern_candidate(
+        text: str,
+        candidate: Candidate,
+    ) -> Candidate | None:
+        value = text[candidate.start : candidate.end]
+        context = text[max(0, candidate.start - 16) : candidate.start]
+        negative_number_contexts = (
+            "型番",
+            "品番",
+            "商品コード",
+            "注文番号",
+            "受付番号",
+            "管理番号",
+        )
+        if candidate.entity_type == "PHONE_NUMBER" and any(
+            marker in context for marker in negative_number_contexts
+        ):
+            return None
+        if candidate.entity_type == "POSTAL_CODE":
+            has_postal_signal = "〒" in value or "-" in value or "郵便" in context
+            if not has_postal_signal:
+                return None
+        if candidate.entity_type == "URL":
+            end = candidate.end
+            for suffix in ("でした", "です", "ました", "ます"):
+                if text[candidate.start : end].endswith(suffix):
+                    end -= len(suffix)
+                    break
+            if end <= candidate.start + len("https://"):
+                return None
+            return Candidate(
+                candidate.entity_type,
+                candidate.start,
+                end,
+                candidate.score,
+                candidate.source,
+            )
+        return candidate
 
     @staticmethod
     def _contextual_number_candidates(text: str) -> list[Candidate]:
@@ -245,7 +330,9 @@ class JapanesePiiEngine:
     @staticmethod
     def _ip_candidates(text: str) -> list[Candidate]:
         candidates: list[Candidate] = []
-        expression = re.compile(r"(?<![\w:])(?:[0-9A-Fa-f:.]{3,})(?![\w:])")
+        expression = re.compile(
+            r"(?<![0-9A-Fa-f:.])(?:[0-9A-Fa-f:.]{3,})(?![0-9A-Fa-f:.])"
+        )
         for match in expression.finditer(text):
             value = match.group().strip(".")
             try:

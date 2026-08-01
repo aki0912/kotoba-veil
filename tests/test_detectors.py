@@ -104,3 +104,58 @@ def test_deterministic_pattern_has_priority_over_overlapping_ner_candidate() -> 
     assert len(findings) == 1
     assert findings[0].entity_type == "PHONE_NUMBER"
     assert findings[0].text == text
+
+
+def test_width_normalization_preserves_original_offsets_and_text() -> None:
+    engine = JapanesePiiEngine()
+    text = "郵便番号は〒１２１－１０９３、電話は０９０－１０７４－１１０６です。"
+
+    findings = engine.analyze(text, ["POSTAL_CODE", "PHONE_NUMBER"], [])
+
+    assert [(finding.entity_type, finding.text) for finding in findings] == [
+        ("POSTAL_CODE", "〒１２１－１０９３"),
+        ("PHONE_NUMBER", "０９０－１０７４－１１０６"),
+    ]
+    assert all(text[finding.start : finding.end] == finding.text for finding in findings)
+
+
+def test_parenthesized_japanese_phone_number_is_detected() -> None:
+    engine = JapanesePiiEngine()
+
+    findings = engine.analyze("連絡先は(080)1148-1212です。", ["PHONE_NUMBER"], [])
+
+    assert [finding.text for finding in findings] == ["(080)1148-1212"]
+
+
+def test_url_and_ip_stop_before_japanese_sentence_suffix() -> None:
+    engine = JapanesePiiEngine()
+    text = "詳細はhttps://example.jp/資料/2です。接続元は192.0.2.1です。"
+
+    findings = engine.analyze(text, ["URL", "IP_ADDRESS", "DATE_TIME"], [])
+
+    assert [(finding.entity_type, finding.text) for finding in findings] == [
+        ("URL", "https://example.jp/資料/2"),
+        ("IP_ADDRESS", "192.0.2.1"),
+    ]
+
+
+def test_full_japanese_address_span_is_detected() -> None:
+    engine = JapanesePiiEngine()
+    values = [
+        "東京都千代田区霞が関1丁目1番1号",
+        "大阪府大阪市北区梅田2-2-2",
+        "北海道札幌市中央区北一条３丁目３番地",
+    ]
+
+    for value in values:
+        findings = engine.analyze(f"送付先は{value}です。", ["ADDRESS"], [])
+        assert [finding.text for finding in findings] == [value]
+
+
+def test_number_shaped_product_identifiers_are_not_contact_details() -> None:
+    engine = JapanesePiiEngine()
+    text = "型番090-1005-2005と商品コード4000097を出荷しました。"
+
+    findings = engine.analyze(text, ["PHONE_NUMBER", "POSTAL_CODE"], [])
+
+    assert findings == []
