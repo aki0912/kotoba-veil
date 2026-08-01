@@ -16,6 +16,9 @@ from benchmarks.metrics import SampleResult, Span, evaluate
 from benchmarks.schema import BenchmarkSample, load_jsonl
 
 
+DEFAULT_DATASET = Path(__file__).resolve().parent / "datasets" / "synthetic-v1.jsonl"
+
+
 def _dictionary_entries(sample: BenchmarkSample) -> list[DictionaryEntry]:
     return [
         DictionaryEntry(
@@ -123,7 +126,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate Kotoba Veil PII detection")
     parser.add_argument(
         "--dataset",
-        default="benchmarks/datasets/smoke.jsonl",
+        default=str(DEFAULT_DATASET),
         help="Gold JSONL dataset",
     )
     parser.add_argument("--output", help="Write the JSON report to this path")

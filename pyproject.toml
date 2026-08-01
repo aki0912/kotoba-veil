@@ -39,6 +39,7 @@ include = ["app*", "scripts*", "benchmarks*"]
 
 [tool.setuptools.package-data]
 app = ["static/*"]
+benchmarks = ["README.md", "schema.json", "datasets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

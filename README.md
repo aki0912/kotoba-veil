@@ -69,7 +69,7 @@ Detection quality can be measured with the versioned Japanese benchmark data:
 
 ```bash
 python -m benchmarks.run \
-  --dataset benchmarks/datasets/smoke.jsonl \
+  --dataset benchmarks/datasets/synthetic-v1.jsonl \
   --output build/benchmark-report.json
 ```
 

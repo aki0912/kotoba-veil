@@ -1,11 +1,17 @@
+import hashlib
+import json
+from collections import Counter
 from pathlib import Path
 
+from benchmarks.generate_synthetic import generate
 from benchmarks.metrics import SampleResult, Span, evaluate
 from benchmarks.run import run_benchmark
 from benchmarks.schema import load_jsonl
 
 
 DATASET = Path("benchmarks/datasets/smoke.jsonl")
+FULL_DATASET = Path("benchmarks/datasets/synthetic-v1.jsonl")
+MANIFEST = Path("benchmarks/datasets/synthetic-v1.manifest.json")
 
 
 def test_smoke_dataset_has_valid_spans_and_unique_ids() -> None:
@@ -18,6 +24,25 @@ def test_smoke_dataset_has_valid_spans_and_unique_ids() -> None:
         for sample in samples
         for entity in sample.entities
     )
+
+
+def test_full_dataset_is_balanced_and_reproducible() -> None:
+    samples = load_jsonl(FULL_DATASET)
+    entity_counts = Counter(
+        entity.entity_type for sample in samples for entity in sample.entities
+    )
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    generated = "".join(
+        json.dumps(sample, ensure_ascii=False, separators=(",", ":")) + "\n"
+        for sample in generate(manifest["seed"])
+    )
+
+    assert len(samples) == 1000
+    assert sum(not sample.entities for sample in samples) == 150
+    assert sum(len(sample.entities) for sample in samples) == 1050
+    assert set(entity_counts.values()) == {70}
+    assert FULL_DATASET.read_text(encoding="utf-8") == generated
+    assert hashlib.sha256(generated.encode("utf-8")).hexdigest() == manifest["sha256"]
 
 
 def test_metrics_separate_exact_and_overlap_matches() -> None:

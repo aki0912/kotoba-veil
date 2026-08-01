@@ -1,0 +1,32 @@
+{
+  "name": "kotoba-veil-japanese-pii-synthetic-v1",
+  "generator_version": "1.0.0",
+  "seed": 20260801,
+  "sample_count": 1000,
+  "gold_entity_count": 1050,
+  "sample_distribution": {
+    "multiple-entities": 100,
+    "negative": 150,
+    "single-entity": 750
+  },
+  "entity_distribution": {
+    "ADDRESS": 70,
+    "BANK_ACCOUNT": 70,
+    "CREDIT_CARD": 70,
+    "CUSTOM": 70,
+    "DATE_TIME": 70,
+    "DRIVER_LICENSE": 70,
+    "EMAIL_ADDRESS": 70,
+    "IP_ADDRESS": 70,
+    "LOCATION": 70,
+    "ORGANIZATION": 70,
+    "PERSON": 70,
+    "PERSONAL_ID": 70,
+    "PHONE_NUMBER": 70,
+    "POSTAL_CODE": 70,
+    "URL": 70
+  },
+  "sha256": "a95f05a26318ca38c167d5368d4a26322a0f98e167836bc330969ca4a1c36ef2",
+  "contains_real_pii": false,
+  "license": "MIT"
+}

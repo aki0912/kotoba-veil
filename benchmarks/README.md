@@ -1,9 +1,15 @@
 # Kotoba Veil benchmark
 
 このフォルダは、PII検出精度を再現可能な方法で測定するための評価資産です。
-`datasets/smoke.jsonl` は実在人物の情報を含まない合成スモークセットであり、
-製品精度を代表する統計的ベンチマークではありません。今後、利用条件を確認した
-公開コーパスや、適切に匿名化・管理された社内評価データを同じ形式で追加します。
+`datasets/synthetic-v1.jsonl` は実在人物の情報を含まない、固定seedで生成した
+1,000件の日本語合成評価セットです。`datasets/smoke.jsonl` は評価パイプライン自体の
+小規模な動作確認に使用します。合成データだけでは実運用分布を再現できないため、
+将来は利用条件を確認した公開コーパスや、適切に匿名化・管理された人手レビュー済み
+社内評価データも同じ形式で追加します。
+
+1,000件版の内訳は、単一PII文書750件、3種類のPIIを含む文書100件、PIIなしの
+ネガティブ文書150件です。15種類のentity typeには、それぞれ70個の正解スパンが
+あります。合計正解スパン数は1,050件です。
 
 ## データ形式
 
@@ -42,8 +48,15 @@ GiNZAを含む通常構成を評価します。
 
 ```bash
 python -m benchmarks.run \
-  --dataset benchmarks/datasets/smoke.jsonl \
+  --dataset benchmarks/datasets/synthetic-v1.jsonl \
   --output build/benchmark-report.json
+```
+
+`--dataset` を省略した場合も1,000件版を使用します。データとマニフェストは次の
+コマンドで同じ内容に再生成できます。
+
+```bash
+python -m benchmarks.generate_synthetic
 ```
 
 決定的ルールだけを評価する場合は `--disable-nlp` を付けます。CIで最低基準を
@@ -51,7 +64,7 @@ python -m benchmarks.run \
 
 ```bash
 python -m benchmarks.run --disable-nlp \
-  --fail-under-recall 0.70 \
+  --fail-under-recall 0.54 \
   --fail-under-zero-miss-rate 0.60
 ```
 

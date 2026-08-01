@@ -9,6 +9,8 @@
     "language": {"const": "ja", "default": "ja"},
     "split": {"enum": ["train", "dev", "test"], "default": "test"},
     "source": {"enum": ["synthetic", "licensed", "internal"]},
+    "generator_version": {"type": ["string", "null"]},
+    "template_id": {"type": ["string", "null"]},
     "text": {"type": "string"},
     "entities": {
       "type": "array",
@@ -53,4 +55,3 @@
   },
   "additionalProperties": false
 }
-

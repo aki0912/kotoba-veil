@@ -26,6 +26,8 @@ class BenchmarkSample(BaseModel):
     language: Literal["ja"] = "ja"
     split: Literal["train", "dev", "test"] = "test"
     source: Literal["synthetic", "licensed", "internal"]
+    generator_version: str | None = None
+    template_id: str | None = None
     text: str
     entities: list[GoldSpan] = Field(default_factory=list)
     dictionary_terms: list[DictionaryTerm] = Field(default_factory=list)
@@ -76,4 +78,3 @@ def load_jsonl(path: str | Path) -> list[BenchmarkSample]:
     if not samples:
         raise ValueError(f"dataset is empty: {dataset_path}")
     return samples
-
