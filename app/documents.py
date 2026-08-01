@@ -265,15 +265,13 @@ def _iter_docx_paragraphs(document) -> Iterator[tuple[str, Any]]:
                 yield f"{prefix}:p:{paragraph_index}", item
                 paragraph_index += 1
             else:
+                from docx.table import _Cell
+
                 current_table = table_index
                 table_index += 1
-                seen_cells: set[int] = set()
                 for row_index, row in enumerate(item.rows):
-                    for cell_index, cell in enumerate(row.cells):
-                        identity = id(cell._tc)
-                        if identity in seen_cells:
-                            continue
-                        seen_cells.add(identity)
+                    for cell_index, table_cell in enumerate(row._tr.tc_lst):
+                        cell = _Cell(table_cell, item)
                         yield from walk(
                             cell,
                             f"{prefix}:t:{current_table}:r:{row_index}:c:{cell_index}",
@@ -350,4 +348,3 @@ def _safe_download_name(filename: str) -> str:
     name = Path(filename).name
     cleaned = re.sub(r"[^\w.()\-\u3000-\u30ff\u3400-\u9fff]", "_", name)
     return cleaned[:180] or "document"
-

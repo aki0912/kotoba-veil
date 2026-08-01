@@ -44,6 +44,46 @@ def test_docx_masks_a_term_split_across_runs_and_keeps_other_text(tmp_path) -> N
     assert masked.sections[0].header.paragraphs[0].text == "███"
 
 
+def test_docx_extracts_and_masks_every_cell_in_a_multirow_table(tmp_path) -> None:
+    from docx import Document
+
+    source = tmp_path / "source.docx"
+    output = tmp_path / "masked.docx"
+    document = Document()
+    table = document.add_table(rows=12, cols=3)
+    expected_texts: set[str] = set()
+    expected_emails: list[str] = []
+    for row_index, row in enumerate(table.rows):
+        for cell_index, cell in enumerate(row.cells):
+            if cell_index == 1:
+                value = f"person{row_index}@example.jp"
+                expected_emails.append(value)
+            else:
+                value = f"cell-{row_index}-{cell_index}"
+            cell.text = value
+            expected_texts.add(value)
+    document.save(source)
+
+    processor = DocumentProcessor()
+    blocks = processor.extract(source)
+    table_blocks = [block for block in blocks if block.id.startswith("doc:t:0:")]
+    assert len(table_blocks) == 36
+    assert {block.text for block in table_blocks} == expected_texts
+
+    findings = processor.analyze_blocks(
+        blocks,
+        JapanesePiiEngine(),
+        ["EMAIL_ADDRESS"],
+        [],
+    )
+    assert {finding.text for finding in findings} == set(expected_emails)
+    processor.mask(source, output, findings, {item.id for item in findings}, "█")
+
+    masked = Document(output)
+    for row in masked.tables[0].rows:
+        assert row.cells[1].text == "█" * len(row.cells[1].text)
+
+
 def test_pptx_masks_a_term_split_across_runs_and_table_text(tmp_path) -> None:
     from pptx import Presentation
     from pptx.util import Inches
@@ -111,4 +151,3 @@ def test_pdf_replaces_content_stream_text_instead_of_overlaying_it(tmp_path) -> 
     assert "taro@example.jp" not in extracted
     assert "***************" in extracted
     assert b"taro@example.jp" not in output.read_bytes()
-
