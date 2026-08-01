@@ -1,6 +1,8 @@
 # Kotoba Veil benchmark
 
 このフォルダは、PII検出精度を再現可能な方法で測定するための評価資産です。
+実測結果は `results/` に保存します。現在の基準結果は
+`results/2026-08-01.md` です。
 `datasets/synthetic-v1.jsonl` は実在人物の情報を含まない、固定seedで生成した
 1,000件の日本語合成評価セットです。`datasets/smoke.jsonl` は評価パイプライン自体の
 小規模な動作確認に使用します。合成データだけでは実運用分布を再現できないため、
