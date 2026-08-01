@@ -95,6 +95,7 @@ def run_benchmark(
                         for item in findings
                     ),
                     latency_ms=latency_ms,
+                    tags=tuple(sample.tags),
                 )
             )
         report = evaluate(results)
@@ -142,6 +143,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--fail-under-recall", type=float)
     parser.add_argument("--fail-under-zero-miss-rate", type=float)
+    parser.add_argument("--fail-under-core-zero-miss-rate", type=float)
+    parser.add_argument("--fail-under-hard-negative-pass-rate", type=float)
     return parser
 
 
@@ -167,6 +170,22 @@ def main(argv: list[str] | None = None) -> int:
     assert isinstance(micro, dict)
     recall = float(micro["recall"])
     zero_miss_rate = float(exact["document_zero_miss_rate"])
+    slices = report["slices"]
+    assert isinstance(slices, dict)
+    core = slices.get("core")
+    hard_negative = slices.get("hard_negative")
+    core_zero_miss_rate = None
+    hard_negative_pass_rate = None
+    if isinstance(core, dict):
+        core_exact = core["exact"]
+        assert isinstance(core_exact, dict)
+        core_zero_miss_rate = float(core_exact["document_zero_miss_rate"])
+    if isinstance(hard_negative, dict):
+        hard_negative_exact = hard_negative["exact"]
+        assert isinstance(hard_negative_exact, dict)
+        hard_negative_pass_rate = float(
+            hard_negative_exact["document_no_false_positive_rate"]
+        )
     failed = False
     if args.fail_under_recall is not None and recall < args.fail_under_recall:
         print(
@@ -181,6 +200,32 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"Zero-miss rate {zero_miss_rate:.6f} is below "
             f"{args.fail_under_zero_miss_rate:.6f}",
+            file=sys.stderr,
+        )
+        failed = True
+    if (
+        args.fail_under_core_zero_miss_rate is not None
+        and (
+            core_zero_miss_rate is None
+            or core_zero_miss_rate < args.fail_under_core_zero_miss_rate
+        )
+    ):
+        print(
+            f"Core zero-miss rate {core_zero_miss_rate or 0.0:.6f} is below "
+            f"{args.fail_under_core_zero_miss_rate:.6f}",
+            file=sys.stderr,
+        )
+        failed = True
+    if (
+        args.fail_under_hard_negative_pass_rate is not None
+        and (
+            hard_negative_pass_rate is None
+            or hard_negative_pass_rate < args.fail_under_hard_negative_pass_rate
+        )
+    ):
+        print(
+            f"Hard-negative pass rate {hard_negative_pass_rate or 0.0:.6f} is below "
+            f"{args.fail_under_hard_negative_pass_rate:.6f}",
             file=sys.stderr,
         )
         failed = True

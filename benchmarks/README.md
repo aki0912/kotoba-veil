@@ -7,9 +7,10 @@
 将来は利用条件を確認した公開コーパスや、適切に匿名化・管理された人手レビュー済み
 社内評価データも同じ形式で追加します。
 
-1,000件版の内訳は、単一PII文書750件、3種類のPIIを含む文書100件、PIIなしの
-ネガティブ文書150件です。15種類のentity typeには、それぞれ70個の正解スパンが
-あります。合計正解スパン数は1,050件です。
+1,000件版の内訳は、単一PII文書750件、3種類のPIIを含む文書100件、PIIではない
+番号などを含むハードネガティブ文書150件です。15種類のentity typeには、それぞれ
+70個の正解スパンがあります。合計正解スパン数は1,050件です。管理用のサンプル番号は
+本文へ埋め込まず、`id` と `template_id` で管理します。
 
 ## データ形式
 
@@ -65,7 +66,8 @@ python -m benchmarks.generate_synthetic
 ```bash
 python -m benchmarks.run --disable-nlp \
   --fail-under-recall 0.54 \
-  --fail-under-zero-miss-rate 0.60
+  --fail-under-core-zero-miss-rate 0.53 \
+  --fail-under-hard-negative-pass-rate 0.70
 ```
 
 ## 出力指標
@@ -79,6 +81,7 @@ python -m benchmarks.run --disable-nlp \
 - 文字処理スループット、モデル読込時間、プロセスの最大RSS
 - サンプル別の見逃しと誤検出
 - Python・主要パッケージのバージョンとGiNZA利用状態
+- 通常ケース `core` と誤検出評価 `hard_negative` の独立集計
 
 PII用途では総合F1だけで合否を決めず、重要entityのRecall、文書単位の
 見逃しゼロ率、誤検出内容を個別に確認してください。合成データを拡張するときは、

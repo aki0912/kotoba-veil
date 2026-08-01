@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 SEED = 20260801
-GENERATOR_VERSION = "1.0.0"
+GENERATOR_VERSION = "1.1.0"
 ENTITY_TYPES = (
     "PERSON",
     "ORGANIZATION",
@@ -91,17 +91,24 @@ def _test_card_number(index: int) -> str:
 
 def _clause(entity_type: str, index: int, rng: random.Random) -> AnnotatedText:
     item = AnnotatedText()
-    names = (
-        "山田太郎",
-        "佐藤花子",
-        "鈴木一郎",
-        "高橋美咲",
-        "伊藤健太",
-        "やまだたろう",
-        "サトウハナコ",
-        "Taro Yamada",
-        "Hanako Sato",
-        "髙橋﨑子",
+    surnames = (
+        ("山田", "やまだ", "ヤマダ", "Yamada"),
+        ("佐藤", "さとう", "サトウ", "Sato"),
+        ("鈴木", "すずき", "スズキ", "Suzuki"),
+        ("高橋", "たかはし", "タカハシ", "Takahashi"),
+        ("伊藤", "いとう", "イトウ", "Ito"),
+        ("渡辺", "わたなべ", "ワタナベ", "Watanabe"),
+        ("中村", "なかむら", "ナカムラ", "Nakamura"),
+        ("小林", "こばやし", "コバヤシ", "Kobayashi"),
+        ("加藤", "かとう", "カトウ", "Kato"),
+        ("吉田", "よしだ", "ヨシダ", "Yoshida"),
+    )
+    given_names = (
+        ("太郎", "たろう", "タロウ", "Taro"),
+        ("花子", "はなこ", "ハナコ", "Hanako"),
+        ("一郎", "いちろう", "イチロウ", "Ichiro"),
+        ("美咲", "みさき", "ミサキ", "Misaki"),
+        ("健太", "けんた", "ケンタ", "Kenta"),
     )
     locations = (
         "東京",
@@ -119,7 +126,16 @@ def _clause(entity_type: str, index: int, rng: random.Random) -> AnnotatedText:
     item.literal(rng.choice(contexts))
 
     if entity_type == "PERSON":
-        item.entity(entity_type, names[index % len(names)])
+        pair_index = index % 50
+        surname = surnames[pair_index // len(given_names)]
+        given_name = given_names[pair_index % len(given_names)]
+        style = pair_index % 4
+        name = (
+            f"{given_name[style]} {surname[style]}"
+            if style == 3
+            else f"{surname[style]}{given_name[style]}"
+        )
+        item.entity(entity_type, name)
         item.literal("さんです。")
     elif entity_type == "ORGANIZATION":
         organizations = (
@@ -133,7 +149,14 @@ def _clause(entity_type: str, index: int, rng: random.Random) -> AnnotatedText:
         item.literal("です。")
     elif entity_type == "LOCATION":
         item.entity(entity_type, locations[index % len(locations)])
-        item.literal("です。")
+        location_suffixes = (
+            "の会場です。",
+            "が配送地域です。",
+            "への出張予定です。",
+            "を担当しています。",
+            "から届きました。",
+        )
+        item.literal(location_suffixes[(index // len(locations)) % len(location_suffixes)])
     elif entity_type == "ADDRESS":
         bases = (
             "東京都千代田区霞が関",
@@ -274,14 +297,24 @@ def _negative(index: int) -> tuple[str, str]:
     product_7 = f"{4_000_000 + index * 97:07d}"
     valid_card = _test_card_number(5000 + index)
     invalid_card = valid_card[:-1] + str((int(valid_card[-1]) + 1) % 10)
+    plain_index = index // 7
+    colors = ("青い", "赤い", "白い", "黄色い", "緑の", "黒い", "透明な")
+    objects = ("封筒", "ファイル", "箱", "冊子", "伝票")
+    destinations = ("受付窓口", "資料室", "倉庫", "会議室", "発送台")
+    plain = (
+        f"{colors[plain_index % len(colors)]}"
+        f"{objects[(plain_index // len(colors)) % len(objects)]}を"
+        f"{destinations[(plain_index // (len(colors) * len(objects))) % len(destinations)]}"
+        "へ移動しました。"
+    )
     variants = (
-        ("order-number", f"ケース{index + 1}：注文番号{order_12}を照合しました。"),
-        ("product-code", f"ケース{index + 1}：商品コード{product_7}は在庫管理用です。"),
-        ("invalid-card", f"ケース{index + 1}：無効なカード番号{invalid_card}を拒否しました。"),
-        ("invalid-email", f"ケース{index + 1}：入力値user{index}@localhostはメールではありません。"),
-        ("invalid-ip", f"ケース{index + 1}：入力値999.999.999.{index % 999}はIPではありません。"),
-        ("phone-shaped-product", f"ケース{index + 1}：型番090-{1000 + index:04d}-{2000 + index:04d}を出荷しました。"),
-        ("plain", f"ケース{index + 1}：青い封筒を受付窓口へ移動しました。"),
+        ("order-number", f"注文番号{order_12}を照合しました。"),
+        ("product-code", f"商品コード{product_7}は在庫管理用です。"),
+        ("invalid-card", f"無効なカード番号{invalid_card}を拒否しました。"),
+        ("invalid-email", f"入力値user{index}@localhostはメールではありません。"),
+        ("invalid-ip", f"入力値999.999.999.{index % 999}はIPではありません。"),
+        ("phone-shaped-product", f"型番090-{1000 + index:04d}-{2000 + index:04d}を出荷しました。"),
+        ("plain", plain),
     )
     return variants[index % len(variants)]
 
@@ -293,7 +326,6 @@ def generate(seed: int = SEED) -> list[dict[str, object]]:
     for entity_type in ENTITY_TYPES:
         for index in range(50):
             body = AnnotatedText()
-            body.literal(f"単独ケース{index + 1}：")
             body.merge(_clause(entity_type, index, rng))
             samples.append(
                 _sample(
@@ -306,7 +338,6 @@ def generate(seed: int = SEED) -> list[dict[str, object]]:
 
     for index in range(100):
         body = AnnotatedText()
-        body.literal(f"複合ケース{index + 1}：")
         selected = [ENTITY_TYPES[(index * 3 + offset) % len(ENTITY_TYPES)] for offset in range(3)]
         for offset, entity_type in enumerate(selected):
             if offset:
@@ -329,7 +360,7 @@ def generate(seed: int = SEED) -> list[dict[str, object]]:
                 f"ja-negative-{index + 1:03d}",
                 body,
                 template_id=f"negative-{template_id}",
-                tags=["negative", template_id],
+                tags=["negative", "hard-negative", template_id],
             )
         )
 
@@ -356,8 +387,8 @@ def write_dataset(output: Path, manifest: Path, seed: int = SEED) -> None:
         )
         tags = sample["tags"]
         assert isinstance(tags, list)
-        if "negative" in tags:
-            tag_distribution["negative"] += 1
+        if "hard-negative" in tags:
+            tag_distribution["hard-negative"] += 1
         elif "multiple-entities" in tags:
             tag_distribution["multiple-entities"] += 1
         else:
@@ -400,4 +431,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

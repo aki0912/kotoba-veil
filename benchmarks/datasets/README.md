@@ -2,10 +2,10 @@
 
 ## `synthetic-v1.jsonl`
 
-- 作成方法: `benchmarks/generate_synthetic.py`、generator version 1.0.0
+- 作成方法: `benchmarks/generate_synthetic.py`、generator version 1.1.0
 - 固定seed: 20260801
 - 件数: 1,000文書、1,050正解スパン
-- 分布: 単一PII 750件、複数PII 100件、PIIなし150件
+- 分布: 単一PII 750件、複数PII 100件、ハードネガティブ150件
 - entity分布: 15種類それぞれ70正解スパン
 - 実在の個人情報: 含まない
 - 用途: 日本語PII検出の精度比較と回帰検知
@@ -14,6 +14,7 @@
 正確な件数とファイルハッシュは `synthetic-v1.manifest.json` に固定しています。
 氏名・組織名などは合成された文脈で使用していますが、一般的な文字列が偶然、実在する
 名称と一致する可能性はあります。特定個人の属性を組み合わせたレコードではありません。
+サンプル管理番号は本文に含めず、JSONLの `id` と `template_id` にのみ保持します。
 
 ## `smoke.jsonl`
 

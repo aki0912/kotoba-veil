@@ -24,6 +24,7 @@ class SampleResult:
     gold: tuple[Span, ...]
     predicted: tuple[Span, ...]
     latency_ms: float
+    tags: tuple[str, ...] = ()
 
 
 def _score(tp: int, fp: int, fn: int) -> dict[str, float | int]:
@@ -82,6 +83,7 @@ def _aggregate(
     counts: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     errors: list[dict[str, object]] = []
     documents_without_misses = 0
+    documents_without_false_positives = 0
 
     for result in results:
         matches = (
@@ -108,6 +110,8 @@ def _aggregate(
         ]
         if not misses:
             documents_without_misses += 1
+        if not false_positives:
+            documents_without_false_positives += 1
         if misses or false_positives:
             errors.append(
                 {
@@ -130,6 +134,9 @@ def _aggregate(
         "document_zero_miss_rate": round(
             documents_without_misses / len(results), 6
         ),
+        "document_no_false_positive_rate": round(
+            documents_without_false_positives / len(results), 6
+        ),
         "false_positives_per_1000_characters": round(
             totals[1] * 1000 / total_characters, 6
         )
@@ -140,10 +147,7 @@ def _aggregate(
     return summary, errors
 
 
-def evaluate(results: Iterable[SampleResult]) -> dict[str, object]:
-    materialized = list(results)
-    if not materialized:
-        raise ValueError("no benchmark results")
+def _evaluate_materialized(materialized: list[SampleResult]) -> dict[str, object]:
     exact, exact_errors = _aggregate(materialized, "exact")
     overlap, overlap_errors = _aggregate(materialized, "overlap")
     latencies = sorted(item.latency_ms for item in materialized)
@@ -174,3 +178,19 @@ def evaluate(results: Iterable[SampleResult]) -> dict[str, object]:
             "overlap": overlap_errors,
         },
     }
+
+
+def evaluate(results: Iterable[SampleResult]) -> dict[str, object]:
+    materialized = list(results)
+    if not materialized:
+        raise ValueError("no benchmark results")
+    report = _evaluate_materialized(materialized)
+    core = [item for item in materialized if "hard-negative" not in item.tags]
+    hard_negative = [item for item in materialized if "hard-negative" in item.tags]
+    slices: dict[str, object] = {}
+    if core:
+        slices["core"] = _evaluate_materialized(core)
+    if hard_negative:
+        slices["hard_negative"] = _evaluate_materialized(hard_negative)
+    report["slices"] = slices
+    return report

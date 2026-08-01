@@ -39,8 +39,11 @@ def test_full_dataset_is_balanced_and_reproducible() -> None:
 
     assert len(samples) == 1000
     assert sum(not sample.entities for sample in samples) == 150
+    assert sum("hard-negative" in sample.tags for sample in samples) == 150
     assert sum(len(sample.entities) for sample in samples) == 1050
     assert set(entity_counts.values()) == {70}
+    assert all("単独ケース" not in sample.text for sample in samples)
+    assert all("複合ケース" not in sample.text for sample in samples)
     assert FULL_DATASET.read_text(encoding="utf-8") == generated
     assert hashlib.sha256(generated.encode("utf-8")).hexdigest() == manifest["sha256"]
 
@@ -75,6 +78,23 @@ def test_duplicate_prediction_cannot_match_one_gold_span_twice() -> None:
 
     assert report["exact"]["micro"]["true_positives"] == 1
     assert report["exact"]["micro"]["false_positives"] == 1
+
+
+def test_hard_negative_metrics_are_reported_separately() -> None:
+    result = SampleResult(
+        sample_id="hard-negative",
+        text_length=13,
+        gold=(),
+        predicted=(Span("PHONE_NUMBER", 0, 13, "090-1000-2000"),),
+        latency_ms=1.0,
+        tags=("hard-negative",),
+    )
+
+    report = evaluate([result])
+    hard_negative = report["slices"]["hard_negative"]
+
+    assert hard_negative["exact"]["micro"]["false_positives"] == 1
+    assert hard_negative["exact"]["document_no_false_positive_rate"] == 0.0
 
 
 def test_rule_only_benchmark_runs_against_application_engine() -> None:
