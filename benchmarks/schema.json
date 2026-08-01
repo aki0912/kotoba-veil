@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kotoba-veil.local/schemas/benchmark-sample.json",
+  "title": "Kotoba Veil benchmark sample",
+  "type": "object",
+  "required": ["id", "source", "text", "entities"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "language": {"const": "ja", "default": "ja"},
+    "split": {"enum": ["train", "dev", "test"], "default": "test"},
+    "source": {"enum": ["synthetic", "licensed", "internal"]},
+    "text": {"type": "string"},
+    "entities": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/span"}
+    },
+    "dictionary_terms": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/dictionaryTerm"},
+      "default": []
+    },
+    "enabled_entities": {
+      "type": ["array", "null"],
+      "items": {"$ref": "#/$defs/entityType"}
+    },
+    "tags": {"type": "array", "items": {"type": "string"}, "default": []},
+    "notes": {"type": "string", "default": ""}
+  },
+  "$defs": {
+    "entityType": {
+      "enum": ["PERSON", "ORGANIZATION", "LOCATION", "ADDRESS", "PHONE_NUMBER", "POSTAL_CODE", "EMAIL_ADDRESS", "PERSONAL_ID", "DRIVER_LICENSE", "BANK_ACCOUNT", "CREDIT_CARD", "DATE_TIME", "URL", "IP_ADDRESS", "CUSTOM"]
+    },
+    "span": {
+      "type": "object",
+      "required": ["entity_type", "start", "end", "text"],
+      "properties": {
+        "entity_type": {"$ref": "#/$defs/entityType"},
+        "start": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 1},
+        "text": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "dictionaryTerm": {
+      "type": "object",
+      "required": ["term"],
+      "properties": {
+        "term": {"type": "string", "minLength": 1},
+        "entity_type": {"$ref": "#/$defs/entityType"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
+

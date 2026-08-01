@@ -31,8 +31,11 @@ dev = [
   "pip-licenses==5.0.0",
 ]
 
+[project.scripts]
+kotoba-veil-benchmark = "benchmarks.run:main"
+
 [tool.setuptools.packages.find]
-include = ["app*", "scripts*"]
+include = ["app*", "scripts*", "benchmarks*"]
 
 [tool.setuptools.package-data]
 app = ["static/*"]

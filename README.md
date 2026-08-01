@@ -65,6 +65,17 @@ pytest --cov
 python scripts/check_licenses.py
 ```
 
+Detection quality can be measured with the versioned Japanese benchmark data:
+
+```bash
+python -m benchmarks.run \
+  --dataset benchmarks/datasets/smoke.jsonl \
+  --output build/benchmark-report.json
+```
+
+The dataset format, metrics, threshold options, and extension rules are documented
+in `benchmarks/README.md`.
+
 The license check rejects copyleft, share-alike, non-commercial, or unknown
 license metadata. Two GiNZA/spaCy transitive dependencies have explicit,
 package-scoped commercial-use exceptions documented in

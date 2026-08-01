@@ -19,6 +19,10 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install ".[dev]"
       - run: pytest --cov --cov-report=term-missing
+      - run: >-
+          python -m benchmarks.run --disable-nlp
+          --output build/benchmark-report.json
+          --fail-under-recall 0.55
+          --fail-under-zero-miss-rate 0.50
       - run: python scripts/check_licenses.py
       - run: docker build -t kotoba-veil:test .
-
