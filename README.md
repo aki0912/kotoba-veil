@@ -15,8 +15,13 @@ recognizers, Japanese-specific rules, and a user-managed PII dictionary.
 - Text, DOCX, PPTX, and text-based PDF input and output.
 - DOCX paragraph, table, header, and footer traversal; PPTX text frame, table,
   grouped shape, and notes traversal.
-- PDF content-stream text replacement so the original accepted text is not
-  merely hidden behind a visual overlay.
+- Font-aware Japanese PDF decoding, including subset fonts and text split
+  across adjacent text-show operations on the same line.
+- Roster-field detection with original-offset mapping for letter-spaced Japanese
+  headings, surname/given-name morphology, local organizations, numbered district
+  lists, and dates that include both Gregorian and Japanese era years.
+- PDF black masks that remove accepted glyphs from the content stream and
+  retain their original widths, kerning, and surrounding table layout.
 - Persistent local PII dictionary and local document sessions.
 - No external APIs, telemetry, CDN assets, or runtime model downloads.
 
@@ -63,7 +68,7 @@ change the local SQLite and document-session directory.
 ## Tests and license audit
 
 ```bash
-pytest --cov
+python -m pytest --cov
 python scripts/check_licenses.py
 ```
 
@@ -94,10 +99,17 @@ This is an engineering control, not legal advice.
 
 - Scanned PDFs and images are not processed yet. They require an offline OCR
   adapter such as Tesseract and coordinate-aware redaction.
-- PDF text can be split across font glyph operations. The current adapter
-  analyzes each decoded text operand independently, so a PII value split over
-  multiple operands can be missed. It never claims such a file is fully
-  sanitized without review.
+- PDF support covers simple fonts with usable character mappings and horizontal
+  Identity-H composite fonts. Text within a line is joined across Tj/TJ
+  operands; separate positioned text lines remain separate review blocks.
+  Unsupported Form XObjects, ActualText alternatives, font encodings, or
+  unavailable glyph widths produce an explicit error instead of an incomplete
+  mask. PDFs without extractable text produce an OCR guidance error.
+- PDF output always uses black masks, regardless of `mask_character`. A glyph
+  representing several Unicode characters is masked in full when any of those
+  characters is selected. Re-upload PDFs analyzed before this adapter update.
+  Images, annotations, and other non-page-text content are outside this text
+  masking adapter; output still requires human review.
 - Text embedded in unsupported Office objects, macros, attachments, charts,
   SmartArt, or arbitrary XML extensions may remain unchanged. Macro-enabled
   Office formats are intentionally rejected.

@@ -34,4 +34,10 @@ jobs:
           --fail-under-core-zero-miss-rate 0.99
           --fail-under-hard-negative-pass-rate 0.99
       - run: python scripts/check_licenses.py
+      - run: >-
+          python -m benchmarks.run
+          --dataset benchmarks/datasets/roster-fields.jsonl
+          --output build/benchmark-report-roster.json
+          --fail-under-recall 1.00
+          --fail-under-precision 1.00
       - run: docker build -t kotoba-veil:test .

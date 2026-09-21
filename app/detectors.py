@@ -5,6 +5,7 @@ import ipaddress
 import os
 import re
 import threading
+from bisect import bisect_left
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -69,6 +70,96 @@ class Candidate:
     source: str
 
 
+_KANJI = "一-龯々髙﨑"
+_SPACED_HEADING = re.compile(rf"(?<![{_KANJI}])(?:[{_KANJI}][ \t\u3000]+){{2,}}[{_KANJI}](?![{_KANJI}])")
+_ROLES = re.compile(r"(?:町会|町内会|自治会|実行委員|運営委員|委員|班|係)長")
+_NAME_FIELD = re.compile(
+    rf"(?:^|[、,，\n])[ \t\u3000*＊◎○]*(?P<name>[{_KANJI}]{{2,8}})"
+    r"(?=[ \t\u3000]*(?:[（(][^()（）\n]*[）)])?[ \t\u3000]*(?:[、,，\n]|$))"
+)
+
+
+def _compact_layout(text: str) -> tuple[str, list[int]]:
+    """Join letter-spaced Japanese headings, keeping an original-offset map.
+
+    Spaces between multi-character words and all line breaks are retained.
+    This view is only for detection; the source document is never rewritten.
+    """
+    removed = set()
+    for match in _SPACED_HEADING.finditer(text):
+        removed.update(i for i in range(match.start(), match.end()) if text[i].isspace())
+    offsets = [i for i in range(len(text)) if i not in removed]
+    return "".join(text[i] for i in offsets), offsets
+
+
+def _original_candidate(candidate: Candidate, offsets: list[int]) -> Candidate:
+    return Candidate(candidate.entity_type, offsets[candidate.start],
+                     offsets[candidate.end - 1] + 1, candidate.score, candidate.source)
+
+
+def _name_field_candidates(document, candidates: list[Candidate]) -> list[Candidate]:
+    """Use surname/given-name morphology to repair bounded roster fields.
+
+    An arbitrary kanji list is not sufficient name evidence. Completing a
+    one-character trailing fragment additionally requires other complete names
+    in the list and an NER person span covering the surname and given name.
+    """
+    fields = list(_NAME_FIELD.finditer(document.text))
+    person_spans = {(c.start, c.end) for c in candidates if c.entity_type == "PERSON"}
+    anchors = sum(match.span("name") in person_spans for match in fields)
+    result = []
+    all_tokens = list(document)
+    token_starts = [token.idx for token in all_tokens]
+    for match in fields:
+        start, end = match.span("name")
+        tokens = all_tokens[bisect_left(token_starts, start):bisect_left(token_starts, end)]
+        if (len(tokens) < 2 or tokens[0].idx != start or
+                tokens[-1].idx + len(tokens[-1].text) != end):
+            continue
+        if not tokens[0].tag_.endswith("人名-姓") or not tokens[1].tag_.endswith("人名-名"):
+            continue
+        exact_name = len(tokens) == 2
+        trailing_fragment = (
+            len(tokens) == 3 and len(tokens[2].text) == 1 and
+            tokens[2].tag_ == "名詞-普通名詞-一般" and
+            tokens[2].text not in "役係長宅家様氏殿班部" and anchors >= 2 and
+            (start, tokens[2].idx) in person_spans
+        )
+        if exact_name or trailing_fragment:
+            result.append(Candidate("PERSON", start, end, 0.88, "ginza-name-field"))
+    return result
+
+
+def _local_field_candidates(text: str) -> list[Candidate]:
+    compact, offsets = _compact_layout(text)
+    view = _normalize_detection_text(compact)
+    candidates = []
+    # Bounded organization fields, not mentions inside a job title or sentence.
+    organization = re.compile(
+        rf"(?:^|[、,\n])[ \t*◎○]*(?P<org>[{_KANJI}ァ-ヶー]{{0,24}}"
+        r"(?:自治会|町内会|町会|消防団|女性部|青年部|婦人会|子ども会|子供会|委員会))"
+        r"(?=$|[ \t\n、,。(])"
+    )
+    for match in organization.finditer(view):
+        candidates.append(Candidate("ORGANIZATION", *match.span("org"), 0.88, "jp-organization-field"))
+    # A district list must have a chome anchor and an explicit numbered team.
+    # Team numbers themselves are not place names.
+    district_list = re.compile(
+        rf"^[ \t]*(?P<places>[{_KANJI}]{{2,8}}(?:[、,][ \t]*[{_KANJI}]{{2,8}}){{1,8}})"
+        r"[ \t]*[0-9一二三四五六七八九十]+(?:[～~−-][0-9一二三四五六七八九十]+)?班[ \t]*$",
+        re.MULTILINE,
+    )
+    for match in district_list.finditer(view):
+        places = list(re.finditer(rf"[{_KANJI}]{{2,8}}", match.group("places")))
+        if not any(re.fullmatch(r"[一二三四五六七八九十]+丁目", item.group()) for item in places):
+            continue
+        for place in places:
+            start = match.start("places") + place.start()
+            candidates.append(Candidate("LOCATION", start, start + len(place.group()),
+                                        0.78, "jp-district-list"))
+    return [_original_candidate(candidate, offsets) for candidate in candidates]
+
+
 class GinzaDetector:
     """Lazy GiNZA loader so rule-only startup and health checks stay fast."""
 
@@ -105,19 +196,29 @@ class GinzaDetector:
         self._ensure_loaded()
         if self._nlp is None or not text.strip():
             return []
-        document = self._nlp(text)
+        view, offsets = _compact_layout(text)
+        document = self._nlp(view)
         candidates: list[Candidate] = []
+        roles = list(_ROLES.finditer(view))
         for entity in document.ents:
             mapped = _map_ginza_label(entity.label_)
             if mapped and not _inside_email_like_token(
-                text,
+                view,
                 entity.start_char,
                 entity.end_char,
             ):
+                if any(role.start() <= entity.start_char and entity.end_char <= role.end()
+                       for role in roles):
+                    continue
                 candidates.append(
                     Candidate(mapped, entity.start_char, entity.end_char, 0.82, "ginza")
                 )
-        return candidates
+        name_fields = _name_field_candidates(document, candidates)
+        candidates = [candidate for candidate in candidates
+                      if not any(candidate.start < field.end and candidate.end > field.start
+                                 for field in name_fields)]
+        candidates.extend(name_fields)
+        return [_original_candidate(candidate, offsets) for candidate in candidates]
 
 
 def _inside_email_like_token(text: str, start: int, end: int) -> bool:
@@ -155,6 +256,7 @@ def _map_ginza_label(label: str) -> str | None:
         "COUNTY",
         "GPE_OTHER",
         "LOCATION_OTHER",
+        "DOMESTIC_REGION",
     }:
         return "LOCATION"
     return None
@@ -213,7 +315,15 @@ class JapanesePiiEngine:
     ) -> list[Finding]:
         enabled = set(enabled_entities or [item["id"] for item in ENTITY_CATALOG])
         candidates = self.ginza.analyze(text)
-        candidates.extend(self._pattern_candidates(text))
+        patterns = self._pattern_candidates(text)
+        corrections = [candidate for candidate in patterns
+                       if candidate.source in {"jp-organization-field", "jp-district-list"}]
+        # A corrected name/type must not reappear under its old NER type just
+        # because the user has disabled the corrected category.
+        candidates = [candidate for candidate in candidates
+                      if not any(candidate.start < field.end and candidate.end > field.start
+                                 for field in corrections)]
+        candidates.extend(patterns)
         candidates.extend(self._dictionary_candidates(text, dictionary))
         selected = [candidate for candidate in candidates if candidate.entity_type in enabled]
         selected = self._resolve_overlaps(selected)
@@ -272,7 +382,9 @@ class JapanesePiiEngine:
         )
 
         date_pattern = re.compile(
-            r"(?<!\d)(?:(?:19|20)\d{2}年)?\d{1,2}月\d{1,2}日(?!\d)"
+            r"(?<!\d)(?:19|20)\d{2}\((?:明治|大正|昭和|平成|令和)(?:元|\d{1,2})\)年\d{1,2}月\d{1,2}日(?!\d)"
+            r"|(?<!\d)(?:明治|大正|昭和|平成|令和)(?:元|\d{1,2})年\d{1,2}月\d{1,2}日(?!\d)"
+            r"|(?<!\d)(?:(?:19|20)\d{2}年)?\d{1,2}月\d{1,2}日(?!\d)"
             r"|(?<!\d)(?:19|20)\d{2}([/.-])\d{1,2}\1\d{1,2}(?!\d)"
         )
         candidates.extend(
@@ -282,6 +394,7 @@ class JapanesePiiEngine:
 
         candidates.extend(self._contextual_number_candidates(detection_text))
         candidates.extend(self._contextual_named_entity_candidates(detection_text))
+        candidates.extend(_local_field_candidates(text))
         candidates.extend(self._credit_card_candidates(detection_text))
         candidates.extend(self._ip_candidates(detection_text))
         return candidates
@@ -457,6 +570,9 @@ class JapanesePiiEngine:
             "jp-person-context-rule": 3,
             "jp-organization-context-rule": 3,
             "jp-location-context-rule": 3,
+            "jp-organization-field": 3,
+            "jp-district-list": 3,
+            "ginza-name-field": 3,
             "ginza": 2,
         }
         ranked = sorted(

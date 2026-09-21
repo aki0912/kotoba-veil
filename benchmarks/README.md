@@ -98,3 +98,67 @@ PII用途では総合F1だけで合否を決めず、重要entityのRecall、文
 DOCX、PPTX、PDFについては、検出精度とは別に、出力ファイルから受理済みPIIを
 コピー、検索、テキスト抽出、内部XML・PDFオブジェクト解析で復元できないことを
 評価する文書漏えいスイートを追加します。文書スイートの合格条件は復元率0%です。
+
+## 名簿・役割分担表の回帰確認
+
+`datasets/roster-fields.jsonl` は実在資料の氏名・地名を含めずに作成した22件の
+合成データです。字間の空白、和暦併記、団体名・地区名の列挙、役職と業務名の除外、
+氏名と地名が混在する列を確認します。正解スパンは27件です。
+ルール開発用のため `split` は `dev` です。
+
+```bash
+python -m benchmarks.run \
+  --dataset benchmarks/datasets/roster-fields.jsonl \
+  --output build/benchmark-report-roster.json \
+  --fail-under-recall 1.00 --fail-under-precision 1.00
+```
+
+利用者が確定したPDFの正解データは `data/annotation-review/` にローカル保存し、
+Gitには含めません。`review.json` が `human_confirmed` であり、そのrevisionと
+原本SHA-256が `gold.manifest.json` に一致することを確認してから評価します。
+検出処理は正解ファイルを読み込まず、評価時のPII辞書も空です。
+
+```bash
+python -m benchmarks.run \
+  --dataset data/annotation-review/r8-roles/gold.jsonl \
+  --output build/benchmark-report-reviewed.json \
+  --fail-under-recall 1.00 --fail-under-precision 1.00
+```
+
+同じ資料を使って改善した結果は、その資料での回帰確認です。未知の資料への
+精度保証には使いません。地区名の補完は「丁目を含む地名の列＋班番号」の形式に
+限定し、班番号そのものは地名に含めません。姓・名の形態素による補完にはGiNZAが
+必要です。氏名・組織名をPII辞書へ自動登録する処理はありません。
+
+## 処理変更時の速度比較
+
+今回の実測結果は [PDF・検出処理の速度比較](results/2026-09-22-performance-comparison.md)
+に記録しています。
+
+検出・文書の読み取り・マスク処理を変更したときは、精度確認と合わせて
+変更前後の速度を同じ端末・Python環境・入力・辞書条件で測定します。
+別の日の単発計測だけで速度の増減を判断しません。
+
+今回の確認済みPDFと既存1,000件を使う比較は、次のコマンドで実行できます。
+`--baseline` には比較したい変更前のコミットを指定してください。
+
+```bash
+python -m benchmarks.compare_performance \
+  --baseline af80f62 --trials 6 --pdf-repeats 5 \
+  --output build/performance-comparison
+```
+
+比較対象の検出器・文書処理コードを保存し、別プロセスで前→後、後→前の順を
+交互に実行します。計測中は負荷の高いテストやビルドを並行実行しません。
+モデル読み込み、初回推論、ウォームアップ後のPDF検出、PDF読み取りから
+マスクファイルの保存まで、既存1,000件の検出を分けて記録します。
+PDF検出単体は両版とも現在の正常な読み取り結果を使います。
+全体処理は各版の読み取りを使うため、変更前が文字化けする場合は出力品質が
+異なる比較であることを明記します。HTTP通信・利用者の確認時間は含みません。
+
+生の時間・精度・コードと入力のハッシュは出力先の `raw.json` に保存します。
+この出力先には比較用コードとマスクPDFも生成されるため、`build/` 内で管理します。
+代表値は複数プロセスの中央値とし、増減率、実時間差、ばらつき、精度の変化を
+`results/` に記録します。モデル読み込みはOSのキャッシュを消去しない新規プロセスでの
+値です。端末や他アプリの負荷による差があるため、共有CIでは絶対時間の合否基準を
+設定せず、同じ環境での比較を使います。

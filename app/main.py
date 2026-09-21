@@ -32,6 +32,7 @@ from app.models import (
     MaskResponse,
     TextManualFindingRequest,
 )
+from app.pdf_documents import PdfProcessingError
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -221,6 +222,8 @@ def mask_document(session_id: str, request: DocumentMaskRequest) -> DocumentMask
         document_processor.mask(source, output, findings, accepted, request.mask_character)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="文書セッションが見つかりません。") from error
+    except PdfProcessingError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         raise HTTPException(status_code=422, detail="文書のマスク処理に失敗しました。") from error
     filename = f"masked_{metadata['original_filename']}"

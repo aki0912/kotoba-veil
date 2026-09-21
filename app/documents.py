@@ -110,7 +110,7 @@ class DocumentProcessor:
         elif extension == ".pptx":
             self._mask_pptx(source, output, by_block, accepted_ids, mask_character)
         elif extension == ".pdf":
-            self._mask_pdf(source, output, by_block, accepted_ids)
+            self._mask_pdf(source, output, by_block)
         else:
             raise UnsupportedDocumentError("未対応のファイル形式です。")
 
@@ -188,64 +188,19 @@ class DocumentProcessor:
         presentation.save(output)
 
     def _extract_pdf(self, path: Path) -> list[DocumentBlock]:
-        reader, ContentStream, TextStringObject = _load_pdf_types(path)
-        blocks: list[DocumentBlock] = []
-        for page_index, page in enumerate(reader.pages):
-            content = page.get_contents()
-            if content is None:
-                continue
-            stream = ContentStream(content, reader)
-            for operation_index, (operands, operator) in enumerate(stream.operations):
-                if operator == b"Tj" and operands and isinstance(operands[0], TextStringObject):
-                    text = str(operands[0])
-                    if text.strip():
-                        blocks.append(DocumentBlock(id=f"pdf:{page_index}:{operation_index}:0", text=text))
-                elif operator == b"TJ" and operands:
-                    for item_index, item in enumerate(operands[0]):
-                        if isinstance(item, TextStringObject) and str(item).strip():
-                            blocks.append(
-                                DocumentBlock(
-                                    id=f"pdf:{page_index}:{operation_index}:{item_index}",
-                                    text=str(item),
-                                )
-                            )
-        return blocks
+        from app.pdf_documents import extract_pdf
+
+        return extract_pdf(path)
 
     def _mask_pdf(
         self,
         source: Path,
         output: Path,
         by_block: dict[str, list[Finding]],
-        accepted_ids: set[str],
     ) -> None:
-        from pypdf import PdfReader, PdfWriter
-        from pypdf.generic import ContentStream, TextStringObject
+        from app.pdf_documents import mask_pdf
 
-        reader = PdfReader(source)
-        writer = PdfWriter()
-        for page_index, page in enumerate(reader.pages):
-            content = page.get_contents()
-            if content is not None:
-                stream = ContentStream(content, reader)
-                for operation_index, (operands, operator) in enumerate(stream.operations):
-                    if operator == b"Tj" and operands and isinstance(operands[0], TextStringObject):
-                        block_id = f"pdf:{page_index}:{operation_index}:0"
-                        if block_id in by_block:
-                            original = str(operands[0])
-                            operands[0] = TextStringObject(
-                                apply_mask(original, by_block[block_id], accepted_ids, "*")
-                            )
-                    elif operator == b"TJ" and operands:
-                        for item_index, item in enumerate(operands[0]):
-                            block_id = f"pdf:{page_index}:{operation_index}:{item_index}"
-                            if block_id in by_block and isinstance(item, TextStringObject):
-                                operands[0][item_index] = TextStringObject(
-                                    apply_mask(str(item), by_block[block_id], accepted_ids, "*")
-                                )
-                page.replace_contents(stream)
-            writer.add_page(page)
-        with output.open("wb") as file_handle:
-            writer.write(file_handle)
+        mask_pdf(source, output, by_block)
 
 
 def _load_docx(path: Path):
@@ -335,13 +290,6 @@ def _iter_pptx_text_frames(presentation) -> Iterator[tuple[str, Any]]:
         yield from walk_shapes(slide.shapes, f"slide:{slide_index}")
         if slide.has_notes_slide:
             yield from walk_shapes(slide.notes_slide.shapes, f"slide:{slide_index}:notes")
-
-
-def _load_pdf_types(path: Path):
-    from pypdf import PdfReader
-    from pypdf.generic import ContentStream, TextStringObject
-
-    return PdfReader(path), ContentStream, TextStringObject
 
 
 def _safe_download_name(filename: str) -> str:

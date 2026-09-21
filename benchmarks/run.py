@@ -142,6 +142,7 @@ def _parser() -> argparse.ArgumentParser:
         help="Restrict detection to these entity types",
     )
     parser.add_argument("--fail-under-recall", type=float)
+    parser.add_argument("--fail-under-precision", type=float)
     parser.add_argument("--fail-under-zero-miss-rate", type=float)
     parser.add_argument("--fail-under-core-zero-miss-rate", type=float)
     parser.add_argument("--fail-under-hard-negative-pass-rate", type=float)
@@ -187,6 +188,13 @@ def main(argv: list[str] | None = None) -> int:
             hard_negative_exact["document_no_false_positive_rate"]
         )
     failed = False
+    precision = float(micro["precision"])
+    if args.fail_under_precision is not None and precision < args.fail_under_precision:
+        print(
+            f"Exact precision {precision:.6f} is below {args.fail_under_precision:.6f}",
+            file=sys.stderr,
+        )
+        failed = True
     if args.fail_under_recall is not None and recall < args.fail_under_recall:
         print(
             f"Exact recall {recall:.6f} is below {args.fail_under_recall:.6f}",

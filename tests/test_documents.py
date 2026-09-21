@@ -149,5 +149,5 @@ def test_pdf_replaces_content_stream_text_instead_of_overlaying_it(tmp_path) -> 
 
     extracted = PdfReader(output).pages[0].extract_text()
     assert "taro@example.jp" not in extracted
-    assert "***************" in extracted
+    assert "███████████████" in extracted
     assert b"taro@example.jp" not in output.read_bytes()

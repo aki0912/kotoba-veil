@@ -104,3 +104,15 @@ def test_rule_only_benchmark_runs_against_application_engine() -> None:
     assert report["gold_entity_count"] == 17
     assert report["metadata"]["nlp_disabled"] is True
     assert report["exact"]["micro"]["recall"] > 0
+
+
+def test_benchmark_cli_rejects_false_positives_with_precision_gate(tmp_path, monkeypatch):
+    from benchmarks import run
+    report = {
+        'exact': {'micro': {'precision': 0.5, 'recall': 1.0}, 'document_zero_miss_rate': 1.0},
+        'slices': {},
+    }
+    monkeypatch.setattr(run, 'run_benchmark', lambda *args, **kwargs: report)
+    args = ['--output', str(tmp_path / 'report.json'), '--fail-under-recall', '1.0']
+    assert run.main([*args, '--fail-under-precision', '1.0']) == 1
+    assert run.main([*args, '--fail-under-precision', '0.5']) == 0
