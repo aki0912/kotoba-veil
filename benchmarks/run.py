@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
+import hashlib
 import importlib.metadata
 import json
 import os
@@ -10,6 +12,7 @@ import sys
 import time
 from pathlib import Path
 
+from app import detectors
 from app.detectors import ENTITY_CATALOG, JapanesePiiEngine
 from app.models import DictionaryEntry
 from benchmarks.metrics import SampleResult, Span, evaluate
@@ -50,9 +53,28 @@ def run_benchmark(
     *,
     disable_nlp: bool = False,
     entities: list[str] | None = None,
+    warmup: int = 0,
+    allow_draft: bool = False,
 ) -> dict[str, object]:
+    if warmup < 0:
+        raise ValueError("warmup must be nonnegative")
     dataset_path = Path(dataset)
     samples = load_jsonl(dataset_path)
+    annotation_statuses = sorted({tag for sample in samples for tag in sample.tags
+                                  if tag in {"codex_draft", "review_complete"}})
+    reannotation_manifest = None
+    if any("ai4privacy-reannotated" in sample.tags for sample in samples):
+        manifest_path = dataset_path.parent / "manifest.json"
+        if not manifest_path.exists():
+            raise ValueError("Reannotated dataset requires its export manifest beside the JSONL")
+        reannotation_manifest = json.loads(manifest_path.read_text())
+        output_info = reannotation_manifest["outputs"].get(dataset_path.name)
+        if not output_info or output_info["sha256"] != hashlib.sha256(dataset_path.read_bytes()).hexdigest():
+            raise ValueError("Reannotated dataset checksum mismatch")
+        if annotation_statuses != [reannotation_manifest["status"]]:
+            raise ValueError("Annotation status differs from its export manifest")
+    if "codex_draft" in annotation_statuses and not allow_draft:
+        raise ValueError("Unreviewed Codex annotations: use --allow-draft explicitly for provisional evaluation")
     previous_disable_nlp = os.environ.get("KOTOBA_VEIL_DISABLE_NLP")
     if disable_nlp:
         os.environ["KOTOBA_VEIL_DISABLE_NLP"] = "1"
@@ -64,6 +86,11 @@ def run_benchmark(
         engine = JapanesePiiEngine()
         nlp_available = engine.nlp_available
         model_load_ms = (time.perf_counter() - load_started) * 1000
+        warmup_started = time.perf_counter()
+        for sample in samples[:warmup]:
+            engine.analyze(sample.text, sample.enabled_entities or entities,
+                           _dictionary_entries(sample), block_id=sample.id)
+        warmup_ms = (time.perf_counter() - warmup_started) * 1000
         results: list[SampleResult] = []
         for sample in samples:
             enabled = sample.enabled_entities or entities
@@ -96,18 +123,37 @@ def run_benchmark(
                     ),
                     latency_ms=latency_ms,
                     tags=tuple(sample.tags),
+                    source_gold=tuple(Span(item.entity_type, item.start, item.end, item.text)
+                                      for item in sample.source_entities),
                 )
             )
         report = evaluate(results)
+        languages = sorted({sample.language for sample in samples})
+        if len(languages) > 1:
+            report["by_language"] = {
+                language: evaluate([result for sample, result in zip(samples, results)
+                                    if sample.language == language])
+                for language in languages
+            }
         report["metadata"] = {
             "dataset": dataset_path.as_posix(),
             "dataset_split": sorted({sample.split for sample in samples}),
-            "language": "ja",
+            "language": languages[0] if len(languages) == 1 else "multilingual",
+            "language_counts": dict(sorted(Counter(sample.language for sample in samples).items())),
+            "dataset_sha256": hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
+            "detector_sha256": hashlib.sha256(Path(detectors.__file__).read_bytes()).hexdigest(),
             "nlp_available": nlp_available,
             "nlp_disabled": disable_nlp,
             "enabled_entities": entities
             or [item["id"] for item in ENTITY_CATALOG],
             "model_load_ms": round(model_load_ms, 3),
+            "warmup_samples": min(warmup, len(samples)),
+            "warmup_ms": round(warmup_ms, 3),
+            "source_annotation_count": sum(len(sample.source_entities) for sample in samples),
+            "annotation_statuses": annotation_statuses,
+            "reannotation_manifest": reannotation_manifest,
+            "sample_enabled_entities": sorted({tuple(sample.enabled_entities) for sample in samples
+                                                if sample.enabled_entities is not None}),
             "peak_rss_mb": _peak_rss_mb(),
             "python": platform.python_version(),
             "packages": {
@@ -131,6 +177,10 @@ def _parser() -> argparse.ArgumentParser:
         help="Gold JSONL dataset",
     )
     parser.add_argument("--output", help="Write the JSON report to this path")
+    parser.add_argument("--warmup", type=int, default=0,
+                        help="Run this many extra, unmeasured samples before the full dataset")
+    parser.add_argument("--allow-draft", action="store_true",
+                        help="Explicitly allow provisional Codex annotations before human review")
     parser.add_argument(
         "--disable-nlp",
         action="store_true",
@@ -155,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
         args.dataset,
         disable_nlp=args.disable_nlp,
         entities=args.entities,
+        warmup=args.warmup,
+        allow_draft=args.allow_draft,
     )
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if args.output:

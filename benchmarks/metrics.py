@@ -25,6 +25,42 @@ class SampleResult:
     predicted: tuple[Span, ...]
     latency_ms: float
     tags: tuple[str, ...] = ()
+    source_gold: tuple[Span, ...] = ()
+
+
+def _source_coverage(results: list[SampleResult]) -> dict[str, object]:
+    """Measure actual character masking against every original source label.
+
+    This ignores category and span granularity. Unioned character precision also
+    penalizes masking a whole sentence merely to cover all annotated PII.
+    """
+    per_label = defaultdict(lambda: {"annotations": 0, "fully_covered": 0,
+                                     "characters": 0, "covered_characters": 0})
+    gold_characters = covered_characters = masked_characters = 0
+    for result in results:
+        masked = {i for span in result.predicted for i in range(span.start, span.end)}
+        gold = {i for span in result.source_gold for i in range(span.start, span.end)}
+        gold_characters += len(gold)
+        covered_characters += len(gold & masked)
+        masked_characters += len(masked)
+        for span in result.source_gold:
+            positions = set(range(span.start, span.end))
+            count = len(positions & masked)
+            label = per_label[span.entity_type]
+            label["annotations"] += 1
+            label["fully_covered"] += int(count == len(positions))
+            label["characters"] += len(positions)
+            label["covered_characters"] += count
+    return {
+        "source_annotations": sum(v["annotations"] for v in per_label.values()),
+        "fully_covered_annotations": sum(v["fully_covered"] for v in per_label.values()),
+        "source_characters": gold_characters,
+        "covered_characters": covered_characters,
+        "masked_characters": masked_characters,
+        "character_recall": round(covered_characters / gold_characters, 6) if gold_characters else 0.0,
+        "character_precision": round(covered_characters / masked_characters, 6) if masked_characters else 0.0,
+        "per_source_label": dict(sorted(per_label.items())),
+    }
 
 
 def _score(tp: int, fp: int, fn: int) -> dict[str, float | int]:
@@ -154,7 +190,7 @@ def _evaluate_materialized(materialized: list[SampleResult]) -> dict[str, object
     p95_index = max(0, min(len(latencies) - 1, ceil(len(latencies) * 0.95) - 1))
     total_latency_ms = sum(latencies)
     character_count = sum(item.text_length for item in materialized)
-    return {
+    report = {
         "sample_count": len(materialized),
         "character_count": character_count,
         "gold_entity_count": sum(len(item.gold) for item in materialized),
@@ -178,6 +214,9 @@ def _evaluate_materialized(materialized: list[SampleResult]) -> dict[str, object
             "overlap": overlap_errors,
         },
     }
+    if any(result.source_gold for result in materialized):
+        report["source_pii_coverage"] = _source_coverage(materialized)
+    return report
 
 
 def evaluate(results: Iterable[SampleResult]) -> dict[str, object]:

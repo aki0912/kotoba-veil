@@ -1,6 +1,11 @@
 # Kotoba Veil benchmark
 
 このフォルダは、PII検出精度を再現可能な方法で測定するための評価資産です。
+`ai4privacy/pii-masking-mini-10k` の取り込み・日本語評価にも対応しています。
+[取得方法・タグ対応・評価範囲](datasets/ai4privacy-mini.md)を参照してください。
+[日本語での初回測定結果](results/2026-09-22-ai4privacy-mini.md)も保存しています。
+配布元のタグに本文との不一致があるため、[本文から作り直した日本語版とレビュー画面](datasets/ai4privacy-reannotated.md)
+を用意しています。再注釈の暫定版を測る場合は `--allow-draft` を明示してください。
 実測結果は `results/` に保存します。現在の基準結果は
 `results/2026-08-01.md` です。
 `datasets/synthetic-v1.jsonl` は実在人物の情報を含まない、固定seedで生成した

@@ -6,8 +6,8 @@
   "required": ["id", "source", "text", "entities"],
   "properties": {
     "id": {"type": "string", "minLength": 1},
-    "language": {"const": "ja", "default": "ja"},
-    "split": {"enum": ["train", "dev", "test"], "default": "test"},
+    "language": {"type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$", "default": "ja"},
+    "split": {"enum": ["train", "dev", "test", "validation"], "default": "test"},
     "source": {"enum": ["synthetic", "licensed", "internal"]},
     "generator_version": {"type": ["string", "null"]},
     "template_id": {"type": ["string", "null"]},
@@ -15,6 +15,10 @@
     "entities": {
       "type": "array",
       "items": {"$ref": "#/$defs/span"}
+    },
+    "source_entities": {
+      "type": "array", "default": [],
+      "items": {"$ref": "#/$defs/sourceSpan"}
     },
     "dictionary_terms": {
       "type": "array",
@@ -29,6 +33,17 @@
     "notes": {"type": "string", "default": ""}
   },
   "$defs": {
+    "sourceSpan": {
+      "type": "object",
+      "required": ["entity_type", "start", "end", "text"],
+      "properties": {
+        "entity_type": {"type": "string", "minLength": 1},
+        "start": {"type": "integer", "minimum": 0},
+        "end": {"type": "integer", "minimum": 1},
+        "text": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
     "entityType": {
       "enum": ["PERSON", "ORGANIZATION", "LOCATION", "ADDRESS", "PHONE_NUMBER", "POSTAL_CODE", "EMAIL_ADDRESS", "PERSONAL_ID", "DRIVER_LICENSE", "BANK_ACCOUNT", "CREDIT_CARD", "DATE_TIME", "URL", "IP_ADDRESS", "CUSTOM"]
     },

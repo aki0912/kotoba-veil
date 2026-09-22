@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>日本語PII 正解データのレビュー | Kotoba Veil</title><link rel="stylesheet" href="/review.css"><script src="/review.js" defer></script></head>
+<body>
+<a class="skip" href="#editor">本文へ移動</a>
+<header><div><span class="eyebrow">KOTOBA VEIL · DATASET REVIEW</span><h1>日本語の正解データを確認</h1><p>本文から付け直したタグです。迷う箇所を確認してから、評価用データを書き出せます。</p></div><span id="status" class="badge">読み込み中</span></header>
+<main>
+<section class="overview" aria-label="確認の進み具合"><div><strong id="retained">—</strong><span>日本語として採用</span></div><div><strong id="remaining">—</strong><span>残りの要確認文書</span></div><div><strong id="reviewed">—</strong><span>人が確認した文書</span></div></section>
+<p id="message" role="status" aria-live="polite"></p>
+<details id="policy"><summary>最初に確認：タグの付け方と評価範囲</summary><p>アプリにない分類も保存します。完全一致の採点はアプリ対応タグ、文字のマスク率はすべてのタグを対象にします。要確認がない文書も左の「採用した文書」から修正できます。</p><pre id="policyText"></pre><label><input id="policyAccepted" type="checkbox"> この注釈方針を確認した</label><button id="savePolicy" type="button">方針の確認を保存</button></details>
+<div class="workspace">
+<aside aria-label="文書一覧"><label for="filter">表示する文書</label><select id="filter"><option value="unresolved">要確認・未確認</option><option value="issues">要確認・すべて</option><option value="retained">採用した文書</option><option value="excluded">除外した文書</option><option value="reviewed">人が確認済み</option><option value="all">すべての原文</option></select><form id="searchForm"><label for="query">本文・ID・確認理由を検索</label><div class="inline"><input id="query" type="search" placeholder="例：カード、日付、文書ID"><button type="submit">検索</button></div></form><p id="listCount" class="muted"></p><div id="list" class="doc-list"></div><div class="pager"><button id="prev" type="button">前の一覧</button><button id="next" type="button">次の一覧</button></div></aside>
+<section id="editor" tabindex="-1" aria-label="タグの編集"><p id="empty">左の一覧から文書を選んでください。</p><div id="document" hidden><div class="doc-heading"><h2 id="docTitle"></h2><span id="split" class="badge"></span></div><p id="languageReason" class="muted"></p><div id="issuesBox" class="issues"><h3>ここを判断してください</h3><ul id="issues"></ul></div><details id="notesBox"><summary>Codexの判断理由</summary><ul id="notes"></ul></details>
+<h3>原文とタグ</h3><p class="muted">追加したい文字を選択し、下で種類を選びます。元の文章は変更しません。</p><div id="text" tabindex="0" aria-label="タグ付きの原文"></div>
+<div class="add-panel"><label for="newLabel">追加するタグ</label><select id="newLabel"></select><p id="selection" class="muted">原文の文字を選択してください。</p><div class="inline"><label>開始位置<input id="start" type="number" min="0"></label><label>終了位置<input id="end" type="number" min="1"></label><button id="add" type="button">タグを追加</button></div><small>位置の直接入力でも追加できます。開始を含み、終了を含まない文字位置です。</small></div>
+<h3 id="tagsTitle">タグ一覧</h3><div id="tags"></div><div class="save-panel"><label><input id="keep" type="checkbox"> 日本語データとして採用する</label><label for="reviewNote">判断のメモ（任意）</label><textarea id="reviewNote" rows="2" placeholder="変更した理由など"></textarea><label><input id="humanReviewed" type="checkbox"> 本文・タグ・上の確認事項を確認した</label><p id="dirty" class="muted">保存済み</p><div class="inline"><button id="save" class="primary" type="button">変更を保存</button><button id="saveNext" type="button">保存して次へ</button><button id="discard" type="button">保存前の状態に戻す</button></div></div></div></section>
+</div>
+<section class="export"><h2>評価用データを書き出す</h2><p>保存済みの内容から学習用・検証用を別々に出力します。原文やタグを検出器の辞書へ登録することはありません。</p><div class="inline"><button id="exportDraft" type="button">現在の版を書き出す</button><button id="finalize" class="primary" type="button">要確認のレビューを完了して書き出す</button></div><p id="exportHint" class="muted"></p><div id="downloads"></div></section>
+<footer>原文：ai4privacy/pii-masking-mini-10k · CC BY 4.0 · © 2026 Ai Suisse SA / ai4privacy<br>Codexによる本文からの再注釈。要確認のレビュー完了は、全件を人が確認したことを意味しません。</footer>
+</main></body></html>
