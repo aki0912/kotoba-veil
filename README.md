@@ -88,9 +88,10 @@ in `benchmarks/README.md`.
 
 ## Architecture documentation
 
-Open `docs/system-architecture.html` in a browser for a standalone Japanese
-system diagram covering document extraction, PII detection responsibilities,
-review, masking, and local-data boundaries.
+Open [docs/system-architecture.html](docs/system-architecture.html) in a browser
+for a standalone Japanese guide to the current architecture. It covers the
+input-to-output flow, document-scoped detection, review and masking, source-file
+responsibilities, APIs, storage, and the separate annotation and benchmark tools.
 
 The license check rejects copyleft, share-alike, non-commercial, or unknown
 license metadata. Two GiNZA/spaCy transitive dependencies have explicit,

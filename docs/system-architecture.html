@@ -4,485 +4,349 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Kotoba Veil システム構成とPII処理フロー</title>
+  <title>Kotoba Veil — アーキテクチャと処理の流れ</title>
   <style>
     :root {
-      --bg: #f4f7fb;
-      --surface: #ffffff;
-      --surface-soft: #eef4ff;
-      --text: #172033;
-      --muted: #5f6b7d;
-      --border: #ccd6e5;
-      --primary: #1e5aa8;
-      --primary-soft: #dceaff;
-      --green: #176b4d;
-      --green-soft: #dff5eb;
-      --amber: #8a5700;
-      --amber-soft: #fff0cd;
-      --purple: #62459a;
-      --purple-soft: #eee7ff;
-      --shadow: 0 12px 32px rgba(35, 55, 85, 0.08);
+      --bg: #f4f7fb; --surface: #fff; --soft: #eef4ff; --text: #172033;
+      --muted: #526176; --border: #ccd6e5; --primary: #1e5aa8;
+      --green: #176b4d; --green-soft: #e5f4ed; --amber: #815400; --amber-soft: #fff3d9;
     }
-
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #0d1420;
-        --surface: #151f2e;
-        --surface-soft: #172a43;
-        --text: #edf3fb;
-        --muted: #afbdd0;
-        --border: #344359;
-        --primary: #8fc1ff;
-        --primary-soft: #16385f;
-        --green: #7bdab5;
-        --green-soft: #153c31;
-        --amber: #ffd17a;
-        --amber-soft: #483615;
-        --purple: #c6afff;
-        --purple-soft: #312653;
-        --shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+        --bg: #0d1420; --surface: #151f2e; --soft: #1b2b42; --text: #edf3fb;
+        --muted: #afbdd0; --border: #344359; --primary: #8fc1ff;
+        --green: #8ae0bc; --green-soft: #193a30; --amber: #ffd17a; --amber-soft: #3e321c;
       }
     }
-
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
-      line-height: 1.7;
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.85 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif; }
+    a { color: var(--primary); text-underline-offset: .2em; }
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 3px solid var(--primary); outline-offset: 5px; }
+    .skip { position: absolute; top: -6rem; left: 1rem; z-index: 5; padding: .7rem; background: var(--surface); }
+    .skip:focus { top: 1rem; }
+    .shell { width: min(1260px, calc(100% - 3rem)); margin: auto; }
+    header { padding: 3.5rem 0 2.5rem; border-bottom: 1px solid var(--border); }
+    .eyebrow { color: var(--primary); font-size: .8rem; font-weight: 750; letter-spacing: .12em; margin: 0 0 .7rem; }
+    h1, h2, h3 { line-height: 1.5; }
+    h1 { font-size: clamp(1.85rem, 4vw, 2.8rem); margin: 0; letter-spacing: -.035em; }
+    h2 { font-size: 1.55rem; margin: 0 0 .7rem; }
+    h3 { font-size: 1.05rem; margin: 0 0 .5rem; }
+    p { margin: .65rem 0; }
+    .lead { max-width: 52rem; color: var(--muted); margin: 1rem 0; }
+    .meta { font-size: .8rem; color: var(--muted); }
+    .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.2rem 0; }
+    .badge { background: var(--soft); color: var(--primary); border-radius: 6px; padding: .25rem .65rem; font-size: .8rem; font-weight: 650; }
+    .layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 3rem; align-items: start; }
+    nav { position: sticky; top: 1.5rem; padding: 2rem 0; }
+    nav p { font-size: .8rem; font-weight: 700; color: var(--muted); }
+    nav a { display: block; padding: .45rem .65rem; border-radius: 6px; text-decoration: none; color: var(--muted); font-size: .9rem; }
+    nav a:hover, nav a:focus-visible { background: var(--soft); color: var(--primary); }
+    nav span { display: inline-block; width: 1.8rem; color: var(--primary); font-size: .75rem; }
+    main { min-width: 0; padding-bottom: 3rem; }
+    section { padding: 2.5rem 0; border-bottom: 1px solid var(--border); scroll-margin-top: 1rem; }
+    .section-label { font-size: .8rem; font-weight: 700; color: var(--primary); margin: 0 0 .3rem; }
+    .intro { color: var(--muted); margin: 0 0 1.5rem; }
+    .panel, .card, details { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+    .panel { padding: 1.4rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .grid > * { min-width: 0; }
+    .card { padding: 1.1rem; }
+    .card p { color: var(--muted); font-size: .92rem; }
+    .card p:last-child { margin-bottom: 0; }
+    .small { font-size: .85rem; color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; background: var(--soft); padding: .1rem .3rem; border-radius: 4px; overflow-wrap: anywhere; }
+    pre { overflow-x: auto; padding: 1rem; background: var(--soft); border-radius: 8px; line-height: 1.7; }
+    pre code { padding: 0; overflow-wrap: normal; }
+    .diagram { margin: 1.5rem 0 0; }
+    .diagram .node { padding: 1rem; border: 1px solid var(--border); border-radius: 8px; background: var(--soft); }
+    .diagram .node p { font-size: .9rem; margin: .3rem 0 0; color: var(--muted); }
+    .diagram .central { border: 2px solid var(--primary); background: var(--surface); }
+    .flow-arrow { color: var(--primary); text-align: center; padding: .3rem; font-size: 1.3rem; line-height: 1.4; }
+    .flow-arrow small { font-size: .78rem; margin-left: .6rem; vertical-align: middle; }
+    .flow-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .7rem; }
+    figcaption { font-size: .8rem; color: var(--muted); margin-top: 1rem; }
+    .steps { list-style: none; padding: 0; margin: 1.5rem 0; counter-reset: stage; }
+    .steps > li { position: relative; padding: 0 0 1.6rem 3.4rem; counter-increment: stage; }
+    .steps > li::before { content: counter(stage, decimal-leading-zero); position: absolute; left: 0; top: 0; width: 2.3rem; height: 2.3rem; border: 1px solid var(--border); border-radius: 50%; text-align: center; line-height: 2.3rem; font-size: .8rem; font-weight: 700; color: var(--primary); background: var(--surface); }
+    .steps > li:not(:last-child)::after { content: ""; position: absolute; left: 1.12rem; top: 2.55rem; bottom: .3rem; border-left: 1px solid var(--border); }
+    .steps p { color: var(--muted); font-size: .94rem; margin: .4rem 0; }
+    .notice { border-left: 3px solid var(--green); padding: 1rem 1.2rem; background: var(--green-soft); border-radius: 0 8px 8px 0; margin: 1rem 0; }
+    .notice p { margin: 0; }
+    .note { border-color: var(--amber); background: var(--amber-soft); }
+    details { margin-top: 1rem; padding: .95rem 1.1rem; }
+    summary { cursor: pointer; font-weight: 650; }
+    details[open] summary { margin-bottom: 1rem; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; margin: 1rem 0; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: .9rem; }
+    caption { text-align: left; padding: .75rem 1rem; color: var(--muted); font-size: .8rem; background: var(--surface); }
+    th, td { text-align: left; vertical-align: top; padding: .85rem 1rem; border-bottom: 1px solid var(--border); }
+    th { background: var(--soft); font-weight: 650; }
+    tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+    .metric { font-size: 1.8rem; font-weight: 750; color: var(--primary); line-height: 1.4; }
+    .path-list { padding-left: 1.2rem; }
+    .path-list li { margin: .55rem 0; }
+    footer { padding: 2rem 0; font-size: .82rem; color: var(--muted); }
+    @media (max-width: 950px) {
+      .layout { grid-template-columns: 1fr; gap: 0; }
+      nav { position: static; display: flex; flex-wrap: wrap; gap: .2rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+      nav p { flex-basis: 100%; margin: .2rem .65rem; }
+      nav a { padding: .35rem .65rem; }
+      header { padding: 2rem 0 1.5rem; }
     }
-    a { color: var(--primary); }
-    code {
-      padding: 0.12rem 0.36rem;
-      border-radius: 0.32rem;
-      background: var(--surface-soft);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    @media (max-width: 600px) {
+      .shell { width: calc(100% - 2rem); }
+      h2 { font-size: 1.35rem; }
+      .grid, .flow-row { grid-template-columns: 1fr; }
+      .flow-row > .flow-arrow { transform: rotate(90deg); }
+      .panel { padding: 1rem; }
+      section { padding: 2rem 0; }
+      th, td { padding: .7rem; min-width: 8rem; }
+      .steps > li { padding-left: 2.9rem; }
     }
-    pre {
-      margin: 0;
-      padding: 1rem;
-      overflow-x: auto;
-      border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      background: var(--surface-soft);
-    }
-    pre code { padding: 0; background: transparent; }
-
-    .page {
-      width: min(1180px, calc(100% - 2rem));
-      margin: 0 auto;
-      padding: 2.5rem 0 4rem;
-    }
-    .hero {
-      padding: clamp(1.5rem, 4vw, 3rem);
-      border: 1px solid var(--border);
-      border-radius: 1.25rem;
-      background: linear-gradient(135deg, var(--surface), var(--surface-soft));
-      box-shadow: var(--shadow);
-    }
-    .eyebrow {
-      margin: 0 0 0.4rem;
-      color: var(--primary);
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-    h1, h2, h3 { line-height: 1.35; }
-    h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); }
-    h2 { margin: 0 0 1rem; font-size: clamp(1.4rem, 2.5vw, 2rem); }
-    h3 { margin: 0 0 0.45rem; font-size: 1.05rem; }
-    .lead { max-width: 72ch; margin: 1rem 0 0; color: var(--muted); }
-    .badges { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 1.25rem; }
-    .badge {
-      padding: 0.34rem 0.7rem;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      background: var(--surface);
-      font-size: 0.88rem;
-      font-weight: 650;
-    }
-    nav {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin: 1.25rem 0 0;
-    }
-    nav a {
-      padding: 0.42rem 0.7rem;
-      border-radius: 0.55rem;
-      background: var(--surface-soft);
-      text-decoration: none;
-    }
-    section { margin-top: 3rem; scroll-margin-top: 1rem; }
-
-    .diagram {
-      padding: clamp(1rem, 3vw, 2rem);
-      border: 1px solid var(--border);
-      border-radius: 1.25rem;
-      background: var(--surface);
-      box-shadow: var(--shadow);
-    }
-    .flow-row {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr auto 1fr;
-      align-items: stretch;
-      gap: 0.75rem;
-    }
-    .node {
-      min-width: 0;
-      padding: 1rem;
-      border: 1px solid var(--border);
-      border-radius: 0.85rem;
-      background: var(--surface-soft);
-    }
-    .node p, .engine-card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
-    .arrow, .down-arrow {
-      display: grid;
-      place-items: center;
-      color: var(--primary);
-      font-size: 1.7rem;
-      font-weight: 700;
-    }
-    .down-arrow { min-height: 2.6rem; }
-    .engine {
-      padding: 1.25rem;
-      border: 2px solid var(--primary);
-      border-radius: 1rem;
-      background: var(--surface);
-    }
-    .engine-title {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      gap: 0.5rem;
-      margin-bottom: 1rem;
-    }
-    .engine-title span { color: var(--muted); }
-    .normalize {
-      margin-bottom: 1rem;
-      padding: 0.75rem 1rem;
-      border-radius: 0.75rem;
-      background: var(--green-soft);
-      color: var(--green);
-      font-weight: 650;
-    }
-    .engine-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.75rem;
-    }
-    .engine-card {
-      padding: 1rem;
-      border: 1px solid var(--border);
-      border-radius: 0.8rem;
-      background: var(--surface-soft);
-    }
-    .engine-card.ginza { background: var(--primary-soft); }
-    .engine-card.pattern { background: var(--green-soft); }
-    .engine-card.rules { background: var(--amber-soft); }
-    .engine-card.dictionary { background: var(--purple-soft); }
-    .merge {
-      display: grid;
-      grid-template-columns: 1fr auto 1fr auto 1fr;
-      align-items: stretch;
-      gap: 0.75rem;
-      margin-top: 1rem;
-    }
-
-    .callout-grid, .card-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 1rem;
-    }
-    .card {
-      padding: 1.2rem;
-      border: 1px solid var(--border);
-      border-radius: 0.9rem;
-      background: var(--surface);
-      box-shadow: var(--shadow);
-    }
-    .card p { margin: 0; color: var(--muted); }
-    .number {
-      display: inline-grid;
-      place-items: center;
-      width: 2rem;
-      height: 2rem;
-      margin-bottom: 0.65rem;
-      border-radius: 50%;
-      background: var(--primary-soft);
-      color: var(--primary);
-      font-weight: 750;
-    }
-
-    .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.9rem; }
-    table { width: 100%; border-collapse: collapse; background: var(--surface); }
-    th, td { padding: 0.78rem 0.9rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-    th { background: var(--surface-soft); font-size: 0.9rem; }
-    tr:last-child td { border-bottom: 0; }
-    .source {
-      display: inline-block;
-      padding: 0.14rem 0.5rem;
-      border-radius: 999px;
-      font-size: 0.82rem;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .source.ginza { color: var(--primary); background: var(--primary-soft); }
-    .source.pattern { color: var(--green); background: var(--green-soft); }
-    .source.rules { color: var(--amber); background: var(--amber-soft); }
-    .source.dictionary { color: var(--purple); background: var(--purple-soft); }
-
-    .security {
-      padding: 1.25rem;
-      border-left: 0.35rem solid var(--green);
-      border-radius: 0.75rem;
-      background: var(--green-soft);
-    }
-    .security strong { color: var(--green); }
-    details {
-      margin-top: 0.75rem;
-      padding: 0.85rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: 0.75rem;
-      background: var(--surface);
-    }
-    summary { cursor: pointer; font-weight: 700; }
-    footer { margin-top: 3rem; color: var(--muted); font-size: 0.9rem; }
-
-    @media (max-width: 900px) {
-      .engine-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .callout-grid, .card-grid { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 700px) {
-      .page { width: min(100% - 1rem, 1180px); padding-top: 0.5rem; }
-      .hero, .diagram { border-radius: 0.9rem; }
-      .flow-row, .merge { grid-template-columns: 1fr; }
-      .arrow { min-height: 1.5rem; transform: rotate(90deg); }
-      .engine-grid { grid-template-columns: 1fr; }
-      th, td { min-width: 10rem; }
+    @media print {
+      :root { --bg: #fff; --surface: #fff; --soft: #f0f3f7; --text: #172033; --muted: #526176; --border: #ccd6e5; --primary: #1e5aa8; --green: #176b4d; --green-soft: #e5f4ed; --amber-soft: #fff3d9; }
+      .shell { width: 100%; } .layout { display: block; } nav, .skip { display: none; }
+      header, section { padding: 1.2rem 0; } .card, .node, tr { break-inside: avoid; }
+      .table-wrap { overflow: visible; } a { color: inherit; }
     }
   </style>
 </head>
 <body>
-  <main class="page">
-    <header class="hero">
-      <p class="eyebrow">Kotoba Veil architecture</p>
-      <h1>システム構成とPII処理フロー</h1>
-      <p class="lead">
-        Kotoba Veilがテキストや文書をどこで読み取り、どの検出器でPII候補を作り、
-        人のレビューを経て元形式へマスクを書き戻すかを示します。検出はDocker内で完結し、
-        GiNZAだけに依存せず、検証可能なルールとユーザー辞書を組み合わせます。
-      </p>
-      <div class="badges" aria-label="設計上の重要事項">
-        <span class="badge">完全ローカル処理</span>
-        <span class="badge">外部API不使用</span>
-        <span class="badge">レビュー後に出力</span>
-        <span class="badge">元オフセットを維持</span>
-      </div>
-      <nav aria-label="ページ内ナビゲーション">
-        <a href="#architecture">全体構成</a>
-        <a href="#responsibility">検出責任</a>
-        <a href="#sequence">処理手順</a>
-        <a href="#files">文書形式</a>
-        <a href="#security">セキュリティ</a>
-        <a href="#limits">制約</a>
-      </nav>
+  <a class="skip" href="#main">本文へ移動</a>
+  <div class="shell">
+    <header>
+      <p class="eyebrow">KOTOBA VEIL / ARCHITECTURE</p>
+      <h1>アーキテクチャと<br>処理の流れ</h1>
+      <p class="lead">このアプリの構成と、入力から出力までの流れをまとめた実装ガイドです。まず全体図を見て、検出の仕組み・保存先・評価方法へ進めます。PIIは個人情報など、マスク対象となる情報を指します。</p>
+      <div class="badges" aria-label="設計の要点"><span class="badge">外部API不使用</span><span class="badge">人が候補を確認・修正</span><span class="badge">元の文字位置でマスク</span></div>
+      <p class="meta">実装確認：2026年9月23日 · 参照コード：<code>f948e45</code> · Docker／ローカルPythonに対応<br>この資料は手動で更新しています。実装を変更したら、対応する図・説明も見直してください。</p>
     </header>
-
-    <section id="architecture" aria-labelledby="architecture-title">
-      <h2 id="architecture-title">全体構成図</h2>
-      <div class="diagram" role="img" aria-label="ブラウザから文書入力、PII検出、レビュー、マスク出力までの構成図">
-        <div class="flow-row">
-          <div class="node">
-            <h3>1. ブラウザ</h3>
-            <p>対象PIIを選択し、テキストまたは文書を投入します。</p>
-          </div>
-          <div class="arrow" aria-hidden="true">→</div>
-          <div class="node">
-            <h3>2. FastAPI</h3>
-            <p>入力検証、セッション管理、検出・マスクAPIを提供します。</p>
-          </div>
-          <div class="arrow" aria-hidden="true">→</div>
-          <div class="node">
-            <h3>3. 文書アダプター</h3>
-            <p>TXT、DOCX、PPTX、PDFを共通のテキストブロックへ変換します。</p>
-          </div>
-        </div>
-
-        <div class="down-arrow" aria-hidden="true">↓</div>
-
-        <div class="engine">
-          <div class="engine-title">
-            <strong>4. JapanesePiiEngine</strong>
-            <span>候補は共通形式：type / start / end / score / source</span>
-          </div>
-          <div class="normalize">
-            検出専用の等長正規化：全角ASCII・数字・区切り記号を揃え、元文書の文字位置を維持
-          </div>
-          <div class="engine-grid">
-            <article class="engine-card ginza">
-              <h3>GiNZA NER</h3>
-              <p>人名・組織名・地名だけを担当。明示的なラベル許可リストで誤分類を抑えます。</p>
-            </article>
-            <article class="engine-card pattern">
-              <h3>Presidio Pattern</h3>
-              <p>メール、電話、郵便番号、URLの形式候補を抽出します。</p>
-            </article>
-            <article class="engine-card rules">
-              <h3>日本固有ルール</h3>
-              <p>住所、日付、IP、識別番号、口座、Luhn検証、文脈補完を担当します。</p>
-            </article>
-            <article class="engine-card dictionary">
-              <h3>PII辞書</h3>
-              <p>利用者が登録した語を完全一致候補にし、最も高い優先順位を与えます。</p>
-            </article>
-          </div>
-
-          <div class="merge">
-            <div class="node">
-              <h3>候補の検証</h3>
-              <p>URL終端、IP構文、Luhn、否定文脈などで形式だけの誤検出を除外します。</p>
+    <div class="layout">
+      <nav aria-label="目次">
+        <p>このページでわかること</p>
+        <a href="#architecture"><span>01</span>全体構成</a>
+        <a href="#detection"><span>02</span>検出の仕組み</a>
+        <a href="#documents"><span>03</span>レビューと出力</a>
+        <a href="#modules"><span>04</span>コードとAPI</a>
+        <a href="#storage"><span>05</span>実行環境と保存先</a>
+        <a href="#evaluation"><span>06</span>正解データと評価</a>
+        <a href="#limits"><span>07</span>制約と確認項目</a>
+      </nav>
+      <main id="main">
+        <section id="architecture" aria-labelledby="architecture-title">
+          <p class="section-label">01 / OVERVIEW</p>
+          <h2 id="architecture-title">本体は、ひとつのWebアプリ</h2>
+          <p class="intro">ブラウザの画面とFastAPIが連携し、Python側で文書の読込・検出・マスクを行います。正解データのレビューとベンチマークは、開発用の別経路です。</p>
+          <figure class="diagram panel">
+            <div class="node"><h3>ブラウザの操作画面</h3><p><code>app/static/</code> — テキスト入力・ファイル選択・対象分類の選択</p></div>
+            <div class="flow-arrow" aria-hidden="true">↓ <small>同じサーバーのHTTP API</small></div>
+            <div class="node"><h3>FastAPI</h3><p><code>app/main.py</code> — リクエスト検証、辞書・セッションの取得、各処理の呼び出し</p></div>
+            <div class="flow-arrow" aria-hidden="true">↓</div>
+            <div class="grid">
+              <div class="node"><h3>テキスト入力</h3><p>文字列を1ブロックとして渡す。文書セッションは作らない。</p></div>
+              <div class="node"><h3>DOCX・PPTX・PDF</h3><p><code>DocumentProcessor</code>が本文や表などを、ID付きテキストブロックへ変換。</p></div>
             </div>
-            <div class="arrow" aria-hidden="true">→</div>
-            <div class="node">
-              <h3>対象PIIの選択</h3>
-              <p>画面で有効にしたentity typeだけを残します。</p>
+            <div class="flow-arrow" aria-hidden="true">↓ <small>ブロックIDと本文 ＋ 選択した分類 ＋ PII辞書</small></div>
+            <div class="node central"><h3>JapanesePiiEngine</h3><p>GiNZA・パターン・日本語ルールで候補を生成。文書内の繰り返しを補完し、重複を整理する。<a href="#detection">検出の詳細へ</a></p></div>
+            <div class="flow-arrow" aria-hidden="true">↓ <small>文字位置・分類・検出元を持つFinding</small></div>
+            <div class="node"><h3>レビュー画面</h3><p>自動候補は最初に全件選択。利用者が解除・追加し、マスクする候補IDを送る。</p></div>
+            <div class="flow-arrow" aria-hidden="true">↓ <small>accepted_ids</small></div>
+            <div class="grid">
+              <div class="node"><h3>テキストを置換</h3><p>画面では分類ラベルへ置換して表示。APIはマスク文字への置換にも対応。</p></div>
+              <div class="node"><h3>元形式で出力</h3><p>保存した原本へ選択範囲を反映し、DOCX・PPTX・PDFをダウンロード。</p></div>
             </div>
-            <div class="arrow" aria-hidden="true">→</div>
-            <div class="node">
-              <h3>重複解決</h3>
-              <p>辞書・検証ルール・パターン・GiNZAの順で重複候補を整理します。</p>
+            <figcaption>図の矢印はデータの流れです。検出器や評価処理は外部サービスではなく、このプロジェクト内のPythonコードです。</figcaption>
+          </figure>
+        </section>
+
+        <section id="detection" aria-labelledby="detection-title">
+          <p class="section-label">02 / DETECTION</p>
+          <h2 id="detection-title">候補を作り、文書内でそろえる</h2>
+          <p class="intro"><code>analyze_document()</code>が文書全体を受け取り、各ブロックを解析します。通常のテキスト入力も、1ブロックの文書として同じ処理を通ります。</p>
+          <ol class="steps">
+            <li><h3>元の本文を保ち、検出用の表記を整える</h3><p>ルール用には全角英数字やハイフン類を<strong>文字数が変わらない形</strong>で正規化します。GiNZA用には漢字の字間空白を詰める別の処理を使い、対応表で検出位置を元の本文へ戻します。原本の文字列自体は書き換えません。</p></li>
+            <li><h3>複数の検出器から候補を集める</h3>
+              <div class="grid">
+                <article class="card"><h3>GiNZA NER</h3><p>固有表現認識と形態素情報を利用。人名・組織・地名・一部の施設ラベルを取り込み、名簿欄や署名の氏名範囲を補完します。NLPは各ブロックにつき1回です。</p></article>
+                <article class="card"><h3>Presidio Pattern</h3><p>電話・郵便番号・メール・URLの形式を抽出。型番などの文脈やURL末尾を確認します。Presidioのパターン機能を使い、NLPモデルはGiNZA側で扱います。</p></article>
+                <article class="card"><h3>日本固有ルール</h3><p>住所・日時・法人表記・施設名・担当者欄などを補完。IPの構文、カードのLuhn検証、番号の周辺文脈も扱います。</p></article>
+                <article class="card"><h3>PII辞書</h3><p>利用者が登録した文字列と一致する範囲を候補化します。英字の大文字・小文字は区別しません。最終的な重複解決では最優先です。</p></article>
+              </div>
+            </li>
+            <li><h3>確かな氏名・組織名を、同じ文書の別の箇所にも適用する</h3><p>文脈や形態素から得た、一定条件を満たす3文字以上の候補を使います。分類が曖昧な語は除外し、同じ表記を他のブロックでも探します。姓だけの一致には広げず、メール内部や語の途中への拡張を抑えます。</p><p><strong>この補完情報は1回の文書解析内だけで保持します。</strong>別文書への持ち越しや、PII辞書への自動登録はありません。施設を含む<code>LOCATION</code>は繰り返し補完の対象外です。</p></li>
+            <li><h3>分類の補正・対象分類の絞り込み・重複解決</h3><p>根拠のある文脈補完でGiNZAの範囲や分類を補正してから、有効な分類だけを残します。重なる候補は、検出元の優先度・スコア・範囲の長さ・開始位置の順で選びます。</p></li>
+            <li><h3>元の文字位置を持つFindingを返す</h3><p><code>block_id</code>・<code>start</code>・<code>end</code>で範囲を特定。<code>entity_type</code>・<code>text</code>・<code>source</code>・<code>score</code>・<code>id</code>を添えて、画面とマスク処理が同じ候補を扱えるようにします。</p></li>
+          </ol>
+          <div class="notice"><p><strong>文字位置の約束：</strong><code>start</code>を含み、<code>end</code>を含まないPython文字列のコードポイント単位です。位置はブロック内の元本文を基準にし、ブラウザ側もコードポイント単位で選択範囲を扱います。</p></div>
+          <details>
+            <summary>分類ごとの検出・補完ルール</summary>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="分類ごとの補完ルール">
+              <table><thead><tr><th scope="col">分類</th><th scope="col">現在の補完方法</th></tr></thead><tbody>
+                <tr><th scope="row">人名<br><code>PERSON</code></th><td>宛名・担当者欄・出席者一覧・自己紹介・署名・姓と名の形態素を組み合わせる。混在表記やカタカナにも対応するルールがある。敬称・役職は範囲から除く。</td></tr>
+                <tr><th scope="row">住所<br><code>ADDRESS</code></th><td>都道府県や区から、町名・丁目・番地・建物名・階・部屋番号へ続く構成要素を読む。説明文や別項目の取り込みを抑える。</td></tr>
+                <tr><th scope="row">組織・施設</th><td>法人表記・所属の文脈と施設の接尾語・別名を使う。会社などは<code>ORGANIZATION</code>、施設は主に<code>LOCATION</code>。施設専用のAPI分類はなく、画面の「地名」に含まれる。</td></tr>
+                <tr><th scope="row">日時<br><code>DATE_TIME</code></th><td>西暦・和暦・曜日付き日付・時刻・日程の文脈がある短い日付を検出する。相対表現や所要時間、分数・型番の誤検出を抑える。</td></tr>
+                <tr><th scope="row">電話・郵便番号・メール・URL</th><td>形式に基づいて検出し、番号の周辺文脈やURL末尾を検証する。郵便番号では「〒」を含む場合がある。GiNZAの推定分類は使わない。</td></tr>
+                <tr><th scope="row">IP・カード・識別番号</th><td>IPは<code>ipaddress</code>、カードはLuhnで検証。個人番号・免許証番号・口座番号は桁数と周辺文脈から候補化する。本人や番号の実在性を照会する処理はない。</td></tr>
+                <tr><th scope="row">ユーザー登録語<br><code>CUSTOM</code>など</th><td>PII辞書で指定した分類を使用する。登録語はモデルを更新せずに次の解析へ反映される。</td></tr>
+              </tbody></table>
             </div>
+            <p class="small">これらは現在のルールの狙いと対応範囲です。すべての表記を網羅する保証ではありません。</p>
+          </details>
+          <details>
+            <summary>候補が重なったときの優先順位</summary>
+            <p>高い順に、辞書（5）、電話・メール・URL等のパターンと番号検証（4）、一部の明示的な氏名・組織文脈（3.5）、住所・日時・業務文脈・形態素補完・繰り返し（3）、GiNZA単独（2）です。同順位ではスコア、長い範囲、早い開始位置の順です。</p>
+            <p>文脈によるGiNZA候補の補正は、この順位付けの前にも行います。「長い候補を常に採用する」という仕組みではありません。実装：<code>JapanesePiiEngine.analyze_document()</code>と<code>_resolve_overlaps()</code>。</p>
+          </details>
+        </section>
+
+        <section id="documents" aria-labelledby="documents-title">
+          <p class="section-label">03 / REVIEW &amp; OUTPUT</p>
+          <h2 id="documents-title">採用した範囲だけを、原本へ反映する</h2>
+          <p class="intro">自動候補を解除したり、本文を選択して手動候補を追加したりできます。追加時は「選択箇所のみ／同じ文字列すべて」と、任意の辞書登録を選べます。確認済みかどうかを自動判定する仕組みはありません。</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="形式別の読込と出力">
+            <table><thead><tr><th scope="col">入力</th><th scope="col">読込単位</th><th scope="col">マスクと出力</th></tr></thead><tbody>
+              <tr><th scope="row">テキスト</th><td>入力欄の文字列1つ</td><td>後方から選択範囲を置換。画面では分類ラベルを表示し、APIはマスク文字にも対応。TXTファイルを文書APIへアップロードする機能はない。</td></tr>
+              <tr><th scope="row">DOCX</th><td>段落・表・ヘッダー・フッター</td><td>段落内の複数runにまたがる範囲を、各runへ分配して文字を置換。DOCXとして保存。</td></tr>
+              <tr><th scope="row">PPTX</th><td>テキスト枠・表・グループ内の図形・ノート</td><td>対象テキストのrunへマスク文字を書き戻し、PPTXとして保存。</td></tr>
+              <tr><th scope="row">PDF</th><td>フォント情報で復号した文字。同一行の複数Tj/TJ演算子を連結</td><td>選択したグリフの文字データを除去し、文字の送り幅を維持して黒塗りを描画。元の表や配置を保つ。マスク文字の指定によらず黒塗り。</td></tr>
+            </tbody></table>
           </div>
-        </div>
+          <p class="small">文書APIはDOCX・PPTX・PDFのみ、1ファイル25 MiB以下。PDFで1グリフが複数のUnicode文字を表す場合は、その一部を選択してもグリフ全体を除去します。</p>
+          <details>
+            <summary>テキストと文書では、候補の管理場所が違う</summary>
+            <p>テキストでは、画面が本文・候補・採用IDを持ち、マスク時にまとめて送ります。文書では、サーバーが原本・ブロック・候補を保存し、マスク時はセッションIDと採用IDで参照します。文書の手動候補の追加・削除もサーバーへ保存します。</p>
+            <p>自動候補はチェックを外して不採用にできます。削除APIで消せるのは手動候補だけです。文書のマスクでは、保存済み候補に存在するIDだけを採用します。</p>
+          </details>
+        </section>
 
-        <div class="down-arrow" aria-hidden="true">↓</div>
-
-        <div class="flow-row">
-          <div class="node">
-            <h3>5. レビュー画面</h3>
-            <p>候補をハイライトし、利用者が採用・解除・追加します。</p>
+        <section id="modules" aria-labelledby="modules-title">
+          <p class="section-label">04 / CODE MAP</p>
+          <h2 id="modules-title">変更したい処理から、コードを探す</h2>
+          <p class="intro">HTTPの窓口、検出、形式ごとの入出力、評価を分けています。ファイル名はプロジェクトのルートからの相対パスです。</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="ソースファイルの責務">
+            <table><thead><tr><th scope="col">ファイル</th><th scope="col">責務・主な接続先</th></tr></thead><tbody>
+              <tr><td><code>app/static/index.html</code><br><code>app/static/app.js</code><br><code>app/static/styles.css</code></td><td>画面、候補選択、手動追加、辞書操作、ダウンロード。<code>main.py</code>のAPIを呼ぶ。</td></tr>
+              <tr><td><code>app/main.py</code></td><td>FastAPIと静的ファイル配信。入力を受け取り、検出器・文書処理・辞書・セッションをつなぐ。</td></tr>
+              <tr><td><code>app/models.py</code></td><td>APIのリクエスト・レスポンス、<code>Finding</code>、<code>DocumentBlock</code>のPydanticモデル。</td></tr>
+              <tr><td><code>app/detectors.py</code></td><td>GiNZAの読込、検出器統合、文字位置の変換、文書内補完、重複解決、テキスト置換。</td></tr>
+              <tr><td><code>app/japanese_rules.py</code></td><td>住所・日時・業務文脈・形態素による候補生成。<code>detectors.py</code>から呼ばれ、共通の<code>Candidate</code>を返す。</td></tr>
+              <tr><td><code>app/documents.py</code></td><td><code>DocumentProcessor</code>で形式別の読込・書戻し。<code>DocumentSessionStore</code>で原本と解析結果を保存。PDF処理は下記へ委譲。</td></tr>
+              <tr><td><code>app/pdf_documents.py</code></td><td>PDFの文字コード・グリフ・位置の対応付け、テキストブロック化、文字データの除去と黒塗り。</td></tr>
+              <tr><td><code>app/manual_findings.py</code></td><td>人が指定した範囲の検証、同じ文字列への一括追加、既存候補との衝突処理。</td></tr>
+              <tr><td><code>app/database.py</code></td><td><code>DictionaryStore</code>によるSQLite辞書の登録・取得・削除。</td></tr>
+              <tr><td><code>benchmarks/</code></td><td>正解データのレビュー、採点、前後比較。本体の検出器を呼ぶ。本体は正解データを参照しない。</td></tr>
+            </tbody></table>
           </div>
-          <div class="arrow" aria-hidden="true">→</div>
-          <div class="node">
-            <h3>6. マスク処理</h3>
-            <p>採用されたIDだけを元の文字位置または文書オブジェクトへ反映します。</p>
+          <details>
+            <summary>API一覧を開く</summary>
+            <p>本体を起動すると<code>/api/docs</code>でスキーマを確認できます。以下の<code>{session_id}</code>は保存済み文書セッションを指します。</p>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="APIのメソッドと用途">
+              <table><thead><tr><th scope="col">メソッド・パス</th><th scope="col">用途</th></tr></thead><tbody>
+                <tr><td><code>GET /api/health</code><br><code>GET /api/entities</code></td><td>稼働・NLP利用可否、選択できる分類一覧。</td></tr>
+                <tr><td><code>POST /api/analyze</code><br><code>POST /api/mask</code></td><td>テキストの候補検出、採用候補の置換。</td></tr>
+                <tr><td><code>POST /api/findings/manual</code></td><td>テキストの手動候補追加。</td></tr>
+                <tr><td><code>GET /api/dictionary</code><br><code>POST /api/dictionary</code><br><code>DELETE /api/dictionary/{entry_id}</code></td><td>ユーザー辞書の一覧・登録・削除。</td></tr>
+                <tr><td><code>POST /api/documents/analyze</code></td><td>ファイルと対象分類を受け取り、セッション・ブロック・候補を返す。</td></tr>
+                <tr><td><code>POST /api/documents/{session_id}/findings/manual</code><br><code>DELETE /api/documents/{session_id}/findings/{finding_id}</code></td><td>文書の手動候補を追加・削除。</td></tr>
+                <tr><td><code>POST /api/documents/{session_id}/mask</code><br><code>GET /api/documents/{session_id}/download</code></td><td>採用IDから出力を作成し、ダウンロード。</td></tr>
+              </tbody></table>
+            </div>
+          </details>
+        </section>
+
+        <section id="storage" aria-labelledby="storage-title">
+          <p class="section-label">05 / RUNTIME &amp; DATA</p>
+          <h2 id="storage-title">モデルと、利用者が保存するデータを分ける</h2>
+          <p class="intro">実行時の検出・マスクには外部API、モデルの自動ダウンロード、CDNを使いません。依存パッケージとモデルは、環境構築時にインストールします。</p>
+          <div class="grid">
+            <article class="card"><h3>実行環境</h3><p>DockerではUvicornを1ワーカーで起動し、FastAPIが画面とAPIを配信します。ローカルPythonでも動きます。GiNZAは必要になった時点でプロセス内に読み込みます。</p><p><code>KOTOBA_VEIL_DISABLE_NLP=1</code>ならルールと辞書のみ。モデルを読み込めない場合もNLPなしで動き、<code>nlp_available</code>で状態を返します。</p></article>
+            <article class="card"><h3>モデルと辞書の違い</h3><p><code>ja_ginza</code>と形態素解析用の辞書は依存環境に含まれます。利用者の<strong>PII辞書</strong>は別のSQLiteで、画面から更新できます。PII登録では形態素解析用の辞書を再構築しません。</p></article>
           </div>
-          <div class="arrow" aria-hidden="true">→</div>
-          <div class="node">
-            <h3>7. 元形式で出力</h3>
-            <p>テキスト、DOCX、PPTX、PDFとしてローカルダウンロードします。</p>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="保存するデータと場所">
+            <table><caption>通常の保存基点は<code>data/</code>。<code>KOTOBA_VEIL_DATA_DIR</code>で変更可能。Docker Composeでは専用データボリュームを利用。</caption><thead><tr><th scope="col">保存先</th><th scope="col">内容と寿命</th></tr></thead><tbody>
+              <tr><td><code>kotoba-veil.sqlite3</code></td><td>PII辞書の語・分類・メモ・作成日時。利用者が削除するまで保持。</td></tr>
+              <tr><td><code>sessions/{session_id}/</code></td><td><code>input.*</code>原本、<code>session.json</code>メタデータ、<code>analysis.json</code>本文と候補、<code>masked.*</code>出力。自動削除・期限切れ処理は未実装。</td></tr>
+              <tr><td>ブラウザのメモリ</td><td>入力・候補の採用状態・表示中の結果。画面のリセットでサーバーの原本・解析結果は削除されない。</td></tr>
+              <tr><td>解析呼び出し内のメモリ</td><td>文書内補完に使う氏名・組織名。解析が終われば次の文書には引き継がない。</td></tr>
+            </tbody></table>
           </div>
-        </div>
-      </div>
-    </section>
+          <details>
+            <summary>「ローカル処理」とネットワークの境界</summary>
+            <p>本体は入力本文を外部サービスへ送信しません。ただし、アプリ自身にログイン認証や外向き通信を遮断する機能はありません。現在の<code>compose.yaml</code>の<code>8000:8000</code>はlocalhost限定のポート指定ではありません。実際のアクセス範囲は起動設定とホスト側のネットワーク設定で決まります。</p>
+            <p>HTTPにはCSP、<code>Cache-Control: no-store</code>などを設定しています。これらは認証や保存データの暗号化・削除を代替するものではありません。オフライン起動の確認手順は<a href="../README.md">README.md</a>にあります。</p>
+          </details>
+        </section>
 
-    <section id="responsibility" aria-labelledby="responsibility-title">
-      <h2 id="responsibility-title">PII検出の責任分担</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>PII</th>
-              <th>主検出器</th>
-              <th>検証・補完</th>
-              <th>設計理由</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>人名</td><td><span class="source ginza">GiNZA</span></td><td>敬称・入力欄文脈、PII辞書</td><td>統計NERを使い、表記揺れは文脈で補います。</td></tr>
-            <tr><td>組織名</td><td><span class="source ginza">GiNZA</span></td><td>法人種別・組織接尾辞、PII辞書</td><td>未知組織をNERで探し、法人表現と末尾数字を補完します。</td></tr>
-            <tr><td>地名</td><td><span class="source ginza">GiNZA</span></td><td>都道府県・市区町村接尾辞</td><td>GiNZAの誤分類を日本語の地名構造で補います。</td></tr>
-            <tr><td>住所</td><td><span class="source rules">日本固有ルール</span></td><td>都道府県、市区町村、丁目・番・号</td><td>GiNZAの断片NERではなく、住所全体のスパンを確定します。</td></tr>
-            <tr><td>電話・郵便番号</td><td><span class="source pattern">Presidio Pattern</span></td><td>等長正規化、型番・商品コード否定文脈</td><td>形式は決定的に抽出し、文脈で誤検出を抑えます。</td></tr>
-            <tr><td>メール・URL</td><td><span class="source pattern">Presidio Pattern</span></td><td>URL終端トリム、メール断片のNER除外</td><td>GiNZAの推定ラベルを採用せず、構文を優先します。</td></tr>
-            <tr><td>IPアドレス</td><td><span class="source rules">日本固有ルール</span></td><td><code>ipaddress</code>による構文検証</td><td>IPv4・IPv6を検証し、日本語隣接文字を境界にしません。</td></tr>
-            <tr><td>カード</td><td><span class="source rules">日本固有ルール</span></td><td>Luhnチェック</td><td>桁数だけでなくチェックサムを必須にします。</td></tr>
-            <tr><td>個人番号・免許・口座</td><td><span class="source rules">日本固有ルール</span></td><td>「個人番号」「免許証」「口座」などの文脈</td><td>同じ桁数の一般番号との衝突を抑えます。</td></tr>
-            <tr><td>ユーザー登録語</td><td><span class="source dictionary">PII辞書</span></td><td>完全一致、最優先</td><td>社内固有語をモデル変更なしで即時反映します。</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+        <section id="evaluation" aria-labelledby="evaluation-title">
+          <p class="section-label">06 / EVALUATION</p>
+          <h2 id="evaluation-title">正解データを固定して、精度と速度を測る</h2>
+          <p class="intro">本体のマスク候補を確認する画面と、評価用の正解タグを編集する画面は別です。正解タグの編集は、検出器の学習や辞書登録にはつながりません。</p>
+          <figure class="diagram panel">
+            <div class="node"><h3>本文のスナップショット ＋ 注釈案 ＋ 出典・方針</h3><p><code>texts-only.jsonl</code>・<code>annotations/*.json</code>・メタデータ・<code>policy.md</code></p></div>
+            <div class="flow-arrow" aria-hidden="true">↓ <small>benchmarks/reannotation.py</small></div>
+            <div class="node"><h3>正解タグのレビュー</h3><p><code>benchmarks/review_reannotations.py</code>と<code>review_static/</code>が別のFastAPI画面を提供。既定ポートは8013。編集履歴・revision・方針への同意を管理。</p></div>
+            <div class="flow-arrow" aria-hidden="true">↓ <small>確定してエクスポート</small></div>
+            <div class="node"><h3>版を固定したJSONLとmanifest</h3><p><code>exports/revision-{revision}-{status}/</code>へ日本語データをsplit別に保存。同じ版へ異なる内容を上書きしない。</p></div>
+            <div class="flow-arrow" aria-hidden="true">↓</div>
+            <div class="grid">
+              <div class="node"><h3>現在の精度・速度を測る</h3><p><code>benchmarks/run.py</code> → 検出器 → <code>metrics.py</code>で採点・集計。</p></div>
+              <div class="node"><h3>変更前と変更後を比べる</h3><p><code>benchmarks/compare_detection.py</code>でアプリの2版を別プロセス実行。同じ評価器・入力を使用。</p></div>
+            </div>
+            <figcaption>この流れは評価用です。正解データ・レビュー履歴は<code>data/annotation-review/</code>、生の測定結果は<code>build/</code>、報告は<code>benchmarks/results/</code>で管理します。</figcaption>
+          </figure>
+          <h3 style="margin-top: 1.5rem">現在の評価セット</h3>
+          <div class="table-wrap" tabindex="0" role="region" aria-label="評価データの用途">
+            <table><thead><tr><th scope="col">データ</th><th scope="col">役割</th></tr></thead><tbody>
+              <tr><td><code>generated-ja-218</code></td><td>利用者生成の日本語218文書・1,749タグ。レビュー完了版revision 77、全件dev。今回の検出改善に使用した開発用データ。</td></tr>
+              <tr><td><code>synthetic-v1</code></td><td>1,000件の合成データ。既知の形式と誤検出しやすい一般表現の回帰をCIで確認。</td></tr>
+              <tr><td><code>roster-fields</code></td><td>名簿・役割分担表を模した22件・27タグ。字間空白、氏名範囲、役職除外などを確認。</td></tr>
+              <tr><td>確定済み役割分担表PDF</td><td>ローカルの正解データで検出を確認。原本ハッシュとレビュー版を照合。出力からの文字除去は検出精度と別に確認。</td></tr>
+            </tbody></table>
+          </div>
+          <div class="grid">
+            <article class="card"><h3>正解文字の被覆率</h3><div class="metric">99.28%</div><p>改善後の218文書。完全一致F1は95.33%、検出文字の適合率は99.45%。</p></article>
+            <article class="card"><h3>218文書の総検出時間</h3><div class="metric">17.770秒</div><p>前後各3回の中央値。修正前18.230秒の0.975倍。モデル読込・PDF入出力・HTTPは含まない。</p></article>
+          </div>
+          <p class="small">2026年9月23日の記録値。GiNZA有効・空の辞書・全分類有効。詳細と残存エラーは<a href="../benchmarks/results/2026-09-23-detection-improvements.md">検出改善の測定報告</a>に記載。</p>
+          <div class="notice note"><p><strong>218文書は、未知の文書への性能を測るデータではありません。</strong>改善に使用した開発用データです。全正解文字を覆えたのは195文書で、23文書・34タグに文字の見逃しが残っています。</p></div>
+          <details>
+            <summary>指標と速度比較の読み方</summary>
+            <p><strong>完全一致</strong>は分類・開始位置・終了位置の一致。<strong>文字被覆率</strong>は分類を問わず正解文字をどれだけ覆ったか、<strong>検出文字の適合率</strong>は検出範囲のうち正解に含まれる文字の割合です。人名・住所の全範囲被覆率も別に集計します。候補を全採用した場合の評価であり、出力ファイルの安全性とは別です。</p>
+            <p>郵便番号の「〒」を余分に覆う境界差は、文字が残る見逃しと分けて報告します。暫定タグでの評価には<code>--allow-draft</code>の明示が必要です。</p>
+            <p>速度は、同じ端末・入力・辞書条件で前後各3回以上、実行順を交替し、別プロセスで測ります。各回10文書のウォームアップ後に、総検出時間・1文書の中央値とp95・モデル読込時間を記録。採点や保存は検出時間から除外します。</p>
+            <p>今回の合格条件は、文字被覆率95%以上、人名・住所の全範囲被覆率各95%以上、検出文字の適合率98%以上、総検出時間の中央値が修正前の2倍以内です。比較ツールは目標未達でも結果を保存し、終了コード1を返します。</p>
+            <p>PDFの読込・マスク保存を含む比較には、別の<code>benchmarks/compare_performance.py</code>を使います。再実行コマンド、スナップショットとハッシュの扱いは<a href="../benchmarks/README.md">benchmarks/README.md</a>を参照してください。</p>
+          </details>
+        </section>
 
-    <section id="sequence" aria-labelledby="sequence-title">
-      <h2 id="sequence-title">1件の入力を処理する順序</h2>
-      <div class="card-grid">
-        <article class="card"><span class="number">1</span><h3>読込・分割</h3><p>文書形式ごとに本文、表、ヘッダー、フッター、ノートなどをブロック化します。</p></article>
-        <article class="card"><span class="number">2</span><h3>検出用正規化</h3><p>文字数を変えない変換だけを適用し、元ファイルへの書戻し位置を壊しません。</p></article>
-        <article class="card"><span class="number">3</span><h3>候補生成</h3><p>GiNZA、Presidio、日本固有ルール、辞書を実行して共通Candidateへ変換します。</p></article>
-        <article class="card"><span class="number">4</span><h3>検証・重複解決</h3><p>チェックサム、否定文脈、構文検証を行い、重なる候補から優先候補を残します。</p></article>
-        <article class="card"><span class="number">5</span><h3>人によるレビュー</h3><p>自動検出を確定処理にせず、採用候補と追加マスクを利用者が決定します。</p></article>
-        <article class="card"><span class="number">6</span><h3>書戻し・検証</h3><p>採用IDだけをマスクし、元形式で出力します。PDFは復元可能性を別途検証します。</p></article>
-      </div>
-    </section>
-
-    <section id="files" aria-labelledby="files-title">
-      <h2 id="files-title">文書形式ごとの処理</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>形式</th><th>読取単位</th><th>マスク方法</th><th>注意点</th></tr></thead>
-          <tbody>
-            <tr><td>テキスト</td><td>文字列</td><td>採用スパンを後方から置換</td><td>文字位置を直接利用できます。</td></tr>
-            <tr><td>DOCX</td><td>段落、run、表、ヘッダー、フッター</td><td>文書構造を維持してrunへ書戻し</td><td>複数runに分割されたPIIもブロックとして扱います。</td></tr>
-            <tr><td>PPTX</td><td>テキスト枠、表、グループ、ノート</td><td>shape内のrunへ書戻し</td><td>未対応オブジェクトは制約として明示します。</td></tr>
-            <tr><td>PDF</td><td>フォントの文字対応表で復号し、同一行の文字列を連結</td><td>採用した文字データを除去し、文字幅を保って黒塗り</td><td>スキャンPDFや未対応のフォント、Form XObject、ActualTextはエラーで案内します。</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="security" aria-labelledby="security-title">
-      <h2 id="security-title">ローカル処理とデータ境界</h2>
-      <div class="security">
-        <strong>PII本文は外部サービスへ送信しません。</strong>
-        ブラウザはローカルのFastAPIとだけ通信し、GiNZAモデルと辞書はDockerイメージ内に固定します。
-        実行時のモデルダウンロード、外部API、CDN、テレメトリーは使用しません。
-      </div>
-      <div class="callout-grid" style="margin-top: 1rem;">
-        <article class="card"><h3>一時文書</h3><p>文書セッションはローカルデータディレクトリで管理します。運用時は保存期間と削除方針を設定します。</p></article>
-        <article class="card"><h3>ユーザー辞書</h3><p>SQLiteへローカル保存し、検出時に読み込んで他の候補と統合します。</p></article>
-        <article class="card"><h3>監査可能性</h3><p>各Findingに<code>source</code>と<code>score</code>を保持し、どの検出器が候補を作ったか追跡できます。</p></article>
-      </div>
-    </section>
-
-    <section id="limits" aria-labelledby="limits-title">
-      <h2 id="limits-title">精度評価と現在の制約</h2>
-      <details open>
-        <summary>ベンチマーク結果の読み方</summary>
-        <p>
-          <code>synthetic-v1</code>は既知形式の回帰を検知するための合成データです。
-          このセットで100%でも実文書に対する精度100%を意味しません。公開前には、
-          実運用ドメインから独立に作成した人手レビュー済みホールドアウトデータで評価します。
-        </p>
-      </details>
-      <details>
-        <summary>自動検出は確定処理ではない</summary>
-        <p>PII検出には見逃しと誤検出があり得るため、出力前のレビュー工程を必須とします。</p>
-      </details>
-      <details>
-        <summary>PDFと画像</summary>
-        <p>スキャンPDFや画像内文字にはOCRが必要です。対応するテキストPDFでは、同一行の複数演算子に分割された日本語を連結して解析します。改行や別位置の文字列は別ブロックです。出力は文字データを除去した黒塗りとなり、元の文字幅と表の配置を保ちます。画像や注釈の内容は対象外のため、出力は人が確認してください。</p>
-      </details>
-      <details>
-        <summary>Officeの特殊オブジェクト</summary>
-        <p>マクロ、埋込ファイル、SmartArt、チャート、任意XML拡張は現時点の完全処理対象ではありません。</p>
-      </details>
-    </section>
-
-    <section aria-labelledby="commands-title">
-      <h2 id="commands-title">再現用コマンド</h2>
-      <pre><code>python -m pytest -q
+        <section id="limits" aria-labelledby="limits-title">
+          <p class="section-label">07 / LIMITS &amp; CHECKS</p>
+          <h2 id="limits-title">対応範囲と、変更時に確かめること</h2>
+          <div class="grid">
+            <article class="card"><h3>PDF・画像の制約</h3><p>OCRは未実装。抽出可能な文字がないPDFは案内付きでエラーになります。未対応のフォント・幅情報、Form XObject、ActualTextもエラーにします。画像や注釈など、ページ本文以外の内容はこのマスク処理の対象外です。</p></article>
+            <article class="card"><h3>Office・検出の制約</h3><p>SmartArt・チャート・埋込ファイル・任意XML拡張などは完全処理の対象外です。マクロ付き形式は受け付けません。検出には見逃し・誤検出が残るため、候補と出力の確認が必要です。</p></article>
+          </div>
+          <details>
+            <summary>変更箇所に対応するテストとCI</summary>
+            <ul class="path-list">
+              <li>検出・文字位置・文書内補完：<code>tests/test_detectors.py</code>、<code>test_roster_fields.py</code>、<code>test_business_detection.py</code></li>
+              <li>読込・マスク・文字除去：<code>tests/test_documents.py</code>、<code>test_pdf_documents.py</code></li>
+              <li>画面・API・手動追加・辞書：<code>tests/test_static_ui.py</code>、<code>test_api.py</code>、<code>test_manual_findings.py</code>、<code>test_database.py</code></li>
+              <li>採点・正解レビュー・比較：<code>tests/test_benchmarks.py</code>、<code>test_reannotation.py</code>、<code>test_generated_annotation_review.py</code>、<code>test_performance_comparison.py</code></li>
+            </ul>
+            <p><code>.github/workflows/ci.yml</code>はテストとカバレッジ、ルール単独／GiNZA込みの合成ベンチマーク、名簿の回帰、ライセンス監査、Dockerビルドを実行します。ローカルの218文書と原本PDFはGitに含めず、共有CIの対象外です。</p>
+            <pre><code>python -m pytest --cov
 python -m benchmarks.run --output build/benchmark-report.json
 python scripts/check_licenses.py
 docker compose up --build</code></pre>
-    </section>
-
-    <footer>
-      <p>Kotoba Veil — システム構成は実装とベンチマークの変更に合わせて更新してください。</p>
-    </footer>
-  </main>
+            <p class="small">合成データのCI基準は<code>benchmarks/README.md</code>を参照。絶対的な処理時間は共有CIの合否には使わず、同じ端末での前後比較で確認します。HTMLの資料テストは内容の存在確認であり、実装との一致を自動保証するものではありません。</p>
+          </details>
+        </section>
+        <footer>関連資料：<a href="../README.md">起動・運用</a> · <a href="../benchmarks/README.md">評価・再測定</a> · <a href="../benchmarks/results/2026-09-23-detection-improvements.md">最新の検出改善報告</a><br>このページ自体は外部通信・JavaScriptなしで閲覧できます。リンク先のMarkdownはソース資料です。</footer>
+      </main>
+    </div>
+  </div>
 </body>
 </html>
