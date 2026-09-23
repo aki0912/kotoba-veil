@@ -37,12 +37,14 @@ def _source_coverage(results: list[SampleResult]) -> dict[str, object]:
     per_label = defaultdict(lambda: {"annotations": 0, "fully_covered": 0,
                                      "characters": 0, "covered_characters": 0})
     gold_characters = covered_characters = masked_characters = 0
+    fully_covered_documents = 0
     for result in results:
         masked = {i for span in result.predicted for i in range(span.start, span.end)}
         gold = {i for span in result.source_gold for i in range(span.start, span.end)}
         gold_characters += len(gold)
         covered_characters += len(gold & masked)
         masked_characters += len(masked)
+        fully_covered_documents += int(gold <= masked)
         for span in result.source_gold:
             positions = set(range(span.start, span.end))
             count = len(positions & masked)
@@ -53,6 +55,7 @@ def _source_coverage(results: list[SampleResult]) -> dict[str, object]:
             label["covered_characters"] += count
     return {
         "source_annotations": sum(v["annotations"] for v in per_label.values()),
+        "fully_covered_documents": fully_covered_documents,
         "fully_covered_annotations": sum(v["fully_covered"] for v in per_label.values()),
         "source_characters": gold_characters,
         "covered_characters": covered_characters,

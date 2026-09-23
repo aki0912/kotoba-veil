@@ -202,6 +202,11 @@ class GinzaDetector:
         roles = list(_ROLES.finditer(view))
         for entity in document.ents:
             mapped = _map_ginza_label(entity.label_)
+            value = view[entity.start_char:entity.end_char]
+            # Numeric model/part codes occasionally receive a facility label.
+            # A bare number is not enough evidence for a named entity.
+            if mapped and not any(c.isalpha() for c in value):
+                continue
             if mapped and not _inside_email_like_token(
                 view,
                 entity.start_char,
@@ -211,9 +216,13 @@ class GinzaDetector:
                        for role in roles):
                     continue
                 candidates.append(
-                    Candidate(mapped, entity.start_char, entity.end_char, 0.82, "ginza")
+                    Candidate(mapped, entity.start_char + len(value) - len(value.lstrip()),
+                              entity.end_char - len(value) + len(value.rstrip()), 0.82, "ginza")
                 )
+        from app.japanese_rules import morphological_candidates
+
         name_fields = _name_field_candidates(document, candidates)
+        name_fields.extend(morphological_candidates(document, candidates))
         candidates = [candidate for candidate in candidates
                       if not any(candidate.start < field.end and candidate.end > field.start
                                  for field in name_fields)]
@@ -257,6 +266,12 @@ def _map_ginza_label(label: str) -> str | None:
         "GPE_OTHER",
         "LOCATION_OTHER",
         "DOMESTIC_REGION",
+        "SPORTS_FACILITY",
+        "THEATER",
+        "MUSEUM",
+        "AMUSEMENT_PARK",
+        "STATION",
+        "AIRPORT",
     }:
         return "LOCATION"
     return None
@@ -313,21 +328,77 @@ class JapanesePiiEngine:
         dictionary: Iterable[DictionaryEntry],
         block_id: str = "text",
     ) -> list[Finding]:
+        return self.analyze_document([(block_id, text)], enabled_entities, dictionary)
+
+    def analyze_document(
+        self,
+        blocks: Iterable[tuple[str, str]],
+        enabled_entities: Iterable[str] | None,
+        dictionary: Iterable[DictionaryEntry],
+    ) -> list[Finding]:
+        """Analyze once per block, sharing only bounded names within this call."""
+        from app.japanese_rules import is_name
+
+        materialized = list(blocks)
+        entries = list(dictionary)
         enabled = set(enabled_entities or [item["id"] for item in ENTITY_CATALOG])
-        candidates = self.ginza.analyze(text)
-        patterns = self._pattern_candidates(text)
-        corrections = [candidate for candidate in patterns
-                       if candidate.source in {"jp-organization-field", "jp-district-list"}]
-        # A corrected name/type must not reappear under its old NER type just
-        # because the user has disabled the corrected category.
-        candidates = [candidate for candidate in candidates
-                      if not any(candidate.start < field.end and candidate.end > field.start
-                                 for field in corrections)]
-        candidates.extend(patterns)
-        candidates.extend(self._dictionary_candidates(text, dictionary))
-        selected = [candidate for candidate in candidates if candidate.entity_type in enabled]
-        selected = self._resolve_overlaps(selected)
-        return [self._to_finding(text, candidate, block_id) for candidate in selected]
+        all_candidates = []
+        seeds: dict[str, set[str]] = {}
+        for _, text in materialized:
+            candidates = self.ginza.analyze(text)
+            patterns = self._pattern_candidates(text)
+            corrections = [candidate for candidate in patterns
+                           if candidate.source in {"jp-organization-field", "jp-district-list",
+                                                   "jp-business-rule"}]
+            candidates = [candidate for candidate in candidates
+                          if not any(candidate.start < field.end and candidate.end > field.start
+                                     for field in corrections)]
+            candidates.extend(patterns)
+            for candidate in self._resolve_overlaps(candidates):
+                value = text[candidate.start:candidate.end]
+                reliable_person = (candidate.entity_type == "PERSON" and len(value) >= 3
+                                   and is_name(value) and candidate.source in {
+                                       "jp-business-rule", "ginza-business-name", "ginza-name-field"})
+                reliable_org = (candidate.entity_type == "ORGANIZATION" and len(value) >= 3
+                                and candidate.source in {"jp-business-rule", "jp-organization-field"})
+                if reliable_person or reliable_org:
+                    seeds.setdefault(value, set()).add(candidate.entity_type)
+            candidates.extend(self._dictionary_candidates(text, entries))
+            all_candidates.append(candidates)
+        # Ambiguous seeds are not propagated; the affiliation/place distinction
+        # is decided per mention. No persistent or cross-request name cache.
+        seeds = {value: kinds for value, kinds in seeds.items() if len(kinds) == 1}
+        expression = re.compile("|".join(re.escape(v) for v in sorted(seeds, key=lambda v: (-len(v), v)))) if seeds else None
+        findings = []
+        for (block_id, text), candidates in zip(materialized, all_candidates):
+            if expression:
+                for match in expression.finditer(text):
+                    if _inside_email_like_token(text, match.start(), match.end()):
+                        continue
+                    if ((match.start() and re.match(r"[A-Za-z0-9]", text[match.start()-1])) or
+                            (match.end() < len(text) and re.match(r"[A-Za-z0-9]", text[match.end()]))):
+                        continue
+                    kind = next(iter(seeds[match.group()]))
+                    if kind == "PERSON" and (
+                        (match.start() and re.match(r"[一-龯々髙﨑ァ-ヶー]", text[match.start()-1])) or
+                        (match.end() < len(text) and re.match(r"[一-龯々髙﨑ァ-ヶー]", text[match.end()]))
+                    ):
+                        continue
+                    # Preserve a more complete or explicitly classified mention.
+                    if any(c.start <= match.start() and c.end >= match.end()
+                           and (c.entity_type == kind or c.end-c.start > len(match.group()) or
+                                (c.source == "jp-business-rule" and c.entity_type != kind))
+                           for c in candidates):
+                        continue
+                    candidates.append(Candidate(kind, match.start(), match.end(), .92, "document-repeat"))
+            # Resolve type corrections before the category filter so a disabled
+            # corrected type cannot reappear as a lower-confidence NER type.
+            corrections = [c for c in candidates if c.source == "document-repeat"]
+            candidates = [c for c in candidates if c.source != "ginza" or not any(
+                c.start < fixed.end and c.end > fixed.start for fixed in corrections)]
+            selected = self._resolve_overlaps([c for c in candidates if c.entity_type in enabled])
+            findings.extend(self._to_finding(text, c, block_id) for c in selected)
+        return findings
 
     def _pattern_candidates(self, text: str) -> list[Candidate]:
         detection_text = _normalize_detection_text(text)
@@ -369,28 +440,10 @@ class JapanesePiiEngine:
                     if candidate:
                         candidates.append(candidate)
 
-        number = r"[0-9一二三四五六七八九十百千]+"
-        address_pattern = re.compile(
-            r"(?:東京都|北海道|(?:京都|大阪)府|.{2,3}県)"
-            r"[^\s、。;；]{1,60}?"
-            rf"(?:(?:{number}(?:丁目|番地?|番|号)){{1,4}}|"
-            rf"{number}(?:[-ー]{number}){{1,3}})"
-        )
-        candidates.extend(
-            Candidate("ADDRESS", match.start(), match.end(), 0.76, "jp-address-rule")
-            for match in address_pattern.finditer(detection_text)
-        )
+        from app.japanese_rules import business_candidates, structured_candidates
 
-        date_pattern = re.compile(
-            r"(?<!\d)(?:19|20)\d{2}\((?:明治|大正|昭和|平成|令和)(?:元|\d{1,2})\)年\d{1,2}月\d{1,2}日(?!\d)"
-            r"|(?<!\d)(?:明治|大正|昭和|平成|令和)(?:元|\d{1,2})年\d{1,2}月\d{1,2}日(?!\d)"
-            r"|(?<!\d)(?:(?:19|20)\d{2}年)?\d{1,2}月\d{1,2}日(?!\d)"
-            r"|(?<!\d)(?:19|20)\d{2}([/.-])\d{1,2}\1\d{1,2}(?!\d)"
-        )
-        candidates.extend(
-            Candidate("DATE_TIME", match.start(), match.end(), 0.72, "date-rule")
-            for match in date_pattern.finditer(detection_text)
-        )
+        candidates.extend(structured_candidates(detection_text))
+        candidates.extend(business_candidates(detection_text))
 
         candidates.extend(self._contextual_number_candidates(detection_text))
         candidates.extend(self._contextual_named_entity_candidates(detection_text))
@@ -563,16 +616,19 @@ class JapanesePiiEngine:
             "luhn-rule": 4,
             "jp-context-rule": 4,
             "ip-validator": 4,
-            "presidio-pattern": 3,
-            "local-pattern": 3,
+            "presidio-pattern": 4,
+            "local-pattern": 4,
             "jp-address-rule": 3,
             "date-rule": 3,
-            "jp-person-context-rule": 3,
-            "jp-organization-context-rule": 3,
+            "jp-person-context-rule": 3.5,
+            "jp-organization-context-rule": 3.5,
             "jp-location-context-rule": 3,
             "jp-organization-field": 3,
             "jp-district-list": 3,
             "ginza-name-field": 3,
+            "ginza-business-name": 3,
+            "jp-business-rule": 3,
+            "document-repeat": 3,
             "ginza": 2,
         }
         ranked = sorted(

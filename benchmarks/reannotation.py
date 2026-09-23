@@ -206,15 +206,40 @@ def build(root: Path = ROOT, *, complete: bool = False) -> dict:
     return result
 
 
-def sample_for(row: dict, *, status: str = "codex_draft") -> BenchmarkSample:
+DEFAULT_DATASET = {
+    "id": "ai4privacy-reannotated",
+    "name": "ai4privacy/pii-masking-mini-10k / text-only reannotation",
+    "source": "licensed",
+    "license": "CC-BY-4.0",
+    "attribution": "Copyright © 2026 Ai Suisse SA / ai4privacy",
+    "notes": "Text-only Codex reannotation; original tags and detector predictions not used. CC BY 4.0 / Ai Suisse SA.",
+    "splits": ["train", "validation"],
+}
+
+
+def dataset_info(state: dict) -> dict:
+    # Custom datasets must supply their own provenance, never inherit an unrelated license.
+    info = state.get("dataset", DEFAULT_DATASET)
+    required = {"id", "name", "source", "license", "attribution", "notes", "splits"}
+    if not required <= info.keys() or not isinstance(info["splits"], list):
+        raise ValueError("Incomplete dataset metadata")
+    if not info["splits"] or len(set(info["splits"])) != len(info["splits"]):
+        raise ValueError("Invalid dataset splits")
+    if not set(info["splits"]) <= {"train", "validation", "dev", "test"}:
+        raise ValueError("Invalid dataset splits")
+    return info
+
+
+def sample_for(row: dict, *, status: str = "codex_draft", dataset: dict | None = None) -> BenchmarkSample:
     spans = row["entities"]
+    info = DEFAULT_DATASET if dataset is None else dataset
     return BenchmarkSample(
-        id=f"ai4privacy-reannotated:{row['split']}:{row['id']}",
-        language="ja", split=row["split"], source="licensed", text=row["text"],
+        id=f"{info['id']}:{row['split']}:{row['id']}",
+        language="ja", split=row["split"], source=info["source"], text=row["text"],
         entities=[GoldSpan(**span) for span in spans if span["entity_type"] in APP_LABELS],
         source_entities=[SourceSpan(**span) for span in spans],
-        tags=["ai4privacy-reannotated", status],
-        notes="Text-only Codex reannotation; original tags and detector predictions not used. CC BY 4.0 / Ai Suisse SA.",
+        tags=([info["id"], status] if dataset is None else [info["id"], "text-annotated", status]),
+        notes=info["notes"],
     )
 
 
@@ -223,13 +248,17 @@ def export_dataset(state: dict, root: Path = ROOT) -> dict:
     started = time.perf_counter()
     if state["status"] == "in_progress":
         raise ValueError("Codex annotation pass is incomplete")
+    info = dataset_info(state)
     destination = root / "exports" / f"revision-{state['revision']}-{state['status']}"
-    samples = [sample_for(row, status=state["status"]) for row in state["rows"] if row["keep"]]
+    samples = [sample_for(row, status=state["status"], dataset=state.get("dataset"))
+               for row in state["rows"] if row["keep"]]
     if not samples:
         raise ValueError("Cannot export an empty dataset")
+    if any(sample.split not in info["splits"] for sample in samples):
+        raise ValueError("Dataset splits would omit retained rows")
     contents = {}
     outputs = {}
-    for split in ("train", "validation"):
+    for split in info["splits"]:
         chosen = [sample for sample in samples if sample.split == split]
         data = "".join(sample.model_dump_json() + "\n" for sample in chosen).encode()
         contents[f"ja-{split}.jsonl"] = data
@@ -242,10 +271,12 @@ def export_dataset(state: dict, root: Path = ROOT) -> dict:
     public_state = {key: state[key] for key in (
         "status", "revision", "policy_accepted", "source_snapshot_sha256", "source_rows", "rows"
     )}
+    if "dataset" in state:
+        public_state["dataset"] = info
     state_hash = digest(json.dumps(public_state, ensure_ascii=False, sort_keys=True).encode())
     manifest = {
-        "dataset": "ai4privacy/pii-masking-mini-10k / text-only reannotation",
-        "license": "CC-BY-4.0", "attribution": "Copyright © 2026 Ai Suisse SA / ai4privacy",
+        "dataset": info["name"],
+        "license": info["license"], "attribution": info["attribution"],
         "status": state["status"], "review_revision": state["revision"], "review_sha256": state_hash,
         "source_snapshot_sha256": state["source_snapshot_sha256"],
         "source_rows": state["source_rows"], "retained_rows": len(samples),

@@ -121,10 +121,8 @@ class DocumentProcessor:
         entities: list[str] | None,
         dictionary: list[DictionaryEntry],
     ) -> list[Finding]:
-        findings: list[Finding] = []
-        for block in blocks:
-            findings.extend(engine.analyze(block.text, entities, dictionary, block.id))
-        return findings
+        return engine.analyze_document(((block.id, block.text) for block in blocks),
+                                       entities, dictionary)
 
     def _extract_docx(self, path: Path) -> list[DocumentBlock]:
         document = _load_docx(path)

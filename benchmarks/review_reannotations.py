@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from benchmarks.reannotation import (
-    APP_LABELS, LABELS, ROOT, atomic_json, digest, export_dataset, unresolved, validate_entities,
+    APP_LABELS, LABELS, ROOT, atomic_json, dataset_info, digest, export_dataset, unresolved, validate_entities,
 )
 
 STATIC = Path(__file__).parent / "review_static"
@@ -55,6 +55,9 @@ class ReviewStore:
         draft = json.loads((root / "codex-draft.json").read_text())
         if draft["status"] != "codex_draft" or len(draft["rows"]) != draft["source_rows"]:
             raise ValueError("A complete Codex draft is required")
+        dataset_info(draft)
+        if "dataset" in draft and not (root / "policy.md").is_file():
+            raise ValueError("A custom dataset requires its own policy.md")
         snapshot = root / "texts-only.jsonl"
         if digest(snapshot.read_bytes()) != draft["source_snapshot_sha256"]:
             raise ValueError("Source snapshot hash mismatch")
@@ -66,6 +69,8 @@ class ReviewStore:
             draft["history"] = []
             atomic_json(path, draft)
         self.state = json.loads(path.read_text())
+        if self.state.get("dataset") != draft.get("dataset"):
+            raise ValueError("Review dataset metadata differs from the original draft")
         if self.state["codex_draft_sha256"] != self.draft_hash:
             raise ValueError("Codex draft changed; existing human review was preserved")
         if len(self.state["rows"]) != len(self.originals) or len({r["id"] for r in self.state["rows"]}) != len(self.originals):
@@ -94,6 +99,7 @@ class ReviewStore:
             "policy_accepted": self.state["policy_accepted"],
             "labels": sorted(LABELS), "app_labels": sorted(APP_LABELS),
             "source_snapshot_sha256": self.state["source_snapshot_sha256"],
+            "dataset": dataset_info(self.state),
         }
 
     def save(self, updated: dict):
@@ -166,7 +172,8 @@ def create_app(root: Path = ROOT) -> FastAPI:
 
     @app.get("/api/policy")
     def policy():
-        return {"text": POLICY.read_text()}
+        path = root / "policy.md"
+        return {"text": (path if path.exists() else POLICY).read_text()}
 
     @app.get("/api/state")
     def state():
@@ -233,7 +240,7 @@ def create_app(root: Path = ROOT) -> FastAPI:
     def download(folder: str, filename: str):
         import re
         if not re.fullmatch(r"revision-\d+-(codex_draft|review_complete)", folder) or filename not in {
-            "ja-train.jsonl", "ja-validation.jsonl", "manifest.json"
+            "ja-train.jsonl", "ja-validation.jsonl", "ja-dev.jsonl", "ja-test.jsonl", "manifest.json"
         }:
             raise HTTPException(404)
         path = root / "exports" / folder / filename
