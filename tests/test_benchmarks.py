@@ -1,12 +1,14 @@
 import hashlib
 import json
+
+import pytest
 from collections import Counter
 from pathlib import Path
 
 from benchmarks.generate_synthetic import generate
 from benchmarks.metrics import SampleResult, Span, evaluate
 from benchmarks.run import run_benchmark
-from benchmarks.schema import load_jsonl
+from benchmarks.schema import BenchmarkSample, load_jsonl
 
 
 DATASET = Path("benchmarks/datasets/smoke.jsonl")
@@ -116,3 +118,58 @@ def test_benchmark_cli_rejects_false_positives_with_precision_gate(tmp_path, mon
     args = ['--output', str(tmp_path / 'report.json'), '--fail-under-recall', '1.0']
     assert run.main([*args, '--fail-under-precision', '1.0']) == 1
     assert run.main([*args, '--fail-under-precision', '0.5']) == 0
+
+
+def test_source_coverage_keeps_unmapped_misses_and_penalizes_excess_masking():
+    result = SampleResult(sample_id="coverage", text_length=10,
+                          gold=(Span("PERSON", 0, 4, "name"),),
+                          predicted=(Span("PERSON", 0, 3, "nam"), Span("PERSON", 8, 10, "xx")),
+                          source_gold=(Span("PERSON", 0, 2, "na"), Span("LOCATION", 2, 4, "me"),
+                                       Span("AGE", 5, 7, "80")), latency_ms=1)
+    coverage = evaluate([result])["source_pii_coverage"]
+    assert coverage["character_recall"] == 0.5
+    assert coverage["character_precision"] == 0.6
+    assert coverage["fully_covered_annotations"] == 1
+    assert coverage["per_source_label"]["AGE"]["covered_characters"] == 0
+
+
+def test_coverage_does_not_double_count_overlapping_annotations_or_predictions():
+    result = SampleResult("overlap", 4, (), (Span("PERSON", 0, 4, "name"),
+                                           Span("LOCATION", 0, 2, "na")), 1,
+                          source_gold=(Span("LOCATION", 0, 4, "name"), Span("PERSON", 0, 2, "na")))
+    coverage = evaluate([result])["source_pii_coverage"]
+    assert coverage["source_characters"] == coverage["masked_characters"] == 4
+    assert coverage["character_recall"] == coverage["character_precision"] == 1
+
+
+def test_runner_warmup_keeps_full_dataset_and_reports_actual_languages(tmp_path, monkeypatch):
+    from benchmarks import run
+    calls = []
+
+    class Engine:
+        nlp_available = True
+
+        def analyze(self, text, entities, dictionary, block_id):
+            calls.append(block_id)
+            return []
+
+    monkeypatch.setattr(run, "JapanesePiiEngine", Engine)
+    dataset = tmp_path / "samples.jsonl"
+    samples = [BenchmarkSample(id=str(i), language=language, source="synthetic", text=text,
+                               entities=[{"entity_type": "PERSON", "start": 0, "end": len(text), "text": text}],
+                               source_entities=[{"entity_type": "PERSON", "start": 0, "end": len(text), "text": text}])
+               for i, (language, text) in enumerate([("ja", "太郎"), ("en", "John")]) ]
+    dataset.write_text("\n".join(s.model_dump_json() for s in samples))
+    report = run.run_benchmark(dataset, warmup=10)
+    assert len(calls) == 4 and report["sample_count"] == 2
+    assert report["metadata"]["warmup_samples"] == 2
+    assert report["metadata"]["language"] == "multilingual"
+    assert set(report["by_language"]) == {"ja", "en"}
+    assert report["source_pii_coverage"]["source_annotations"] == 2
+    with pytest.raises(ValueError, match="nonnegative"):
+        run.run_benchmark(dataset, warmup=-1)
+
+
+def test_source_spans_and_language_are_validated():
+    with pytest.raises(ValueError):
+        BenchmarkSample(id="invalid", source="licensed", text="x", language="日本語")

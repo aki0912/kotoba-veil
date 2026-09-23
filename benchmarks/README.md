@@ -1,11 +1,8 @@
 # Kotoba Veil benchmark
 
 このフォルダは、PII検出精度を再現可能な方法で測定するための評価資産です。
-`ai4privacy/pii-masking-mini-10k` の取り込み・日本語評価にも対応しています。
-[取得方法・タグ対応・評価範囲](datasets/ai4privacy-mini.md)を参照してください。
-[日本語での初回測定結果](results/2026-09-22-ai4privacy-mini.md)も保存しています。
-配布元のタグに本文との不一致があるため、[本文から作り直した日本語版とレビュー画面](datasets/ai4privacy-reannotated.md)
-を用意しています。再注釈の暫定版を測る場合は `--allow-draft` を明示してください。
+利用者生成データの正解タグをレビュー画面で確認し、確定した版を評価に使用します。
+暫定版を測る場合は `--allow-draft` を明示してください。
 実測結果は `results/` に保存します。現在の基準結果は
 `results/2026-08-01.md` です。
 利用者生成の日本語218文書のレビュー完了版で測った現状値は
@@ -27,9 +24,13 @@ GiNZA有効・辞書なしで3回測定し、精度、処理時間、分類別�
 利用者が生成した `id`・`text` のJSONLについても、本文から付けた正解タグを
 レビュー画面で編集できます。今回の218件はローカルの
 `data/annotation-review/generated-ja-218/README.md` に手順と注釈方針を記録しています。
-全件devの暫定版で、確認後のrevisionを評価に使用します。レビュー画面は
+現在の218件は全件devで、レビュー完了版revision 77を評価に使用します。レビュー画面は
 `python -m benchmarks.review_reannotations --root data/annotation-review/generated-ja-218 --port 8013`
-で起動します。出典・利用条件・出力区分はデータセットごとに保持されます。
+で起動します。出典・利用条件・出力区分はデータセットごとに必須とし、
+`policy.md` にはそのデータ用の注釈方針を用意します。
+レビュー画面はこの218文書・ポート8013を既定値とします。
+注釈選択から初期案を作る `benchmarks.reannotation` は、本文のスナップショットと
+`--metadata` で明示したJSONを使用します。未注釈の文書を言語判定で自動除外しません。
 
 1行を1文書とするUTF-8 JSONLです。正式な定義は `schema.json` にあります。
 スパン位置はPython文字列のコードポイント単位で、`start` は包含、`end` は非包含です。

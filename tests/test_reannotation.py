@@ -9,24 +9,31 @@ from benchmarks.review_reannotations import ReviewStore, create_app
 from benchmarks.schema import load_jsonl
 
 
+DATASET = {"id": "review-fixture", "name": "確認用合成データ", "source": "synthetic",
+           "license": "未指定", "attribution": "テスト用", "notes": "本文から注釈",
+           "splits": ["train", "validation"]}
+
+
 @pytest.fixture
 def corpus(tmp_path):
-    rows = [ann.text_record("1", "train", "🙂担当は山田です。注文番号はAB123456。"),
-            ann.text_record("2", "validation", "佐藤の年齢は20歳。"),
-            ann.text_record("3", "train", "This is an English document.")]
+    rows = [dict(id="1", split="train", text="🙂担当は山田です。注文番号はAB123456。"),
+            dict(id="2", split="validation", text="佐藤の年齢は20歳。"),
+            dict(id="3", split="train", text="This is an English document.")]
     (tmp_path / "texts-only.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False)+"\n" for r in rows))
     (tmp_path / "annotations").mkdir()
     annotations = [{"id": "1", "entities": [["PERSON", "山田"], ["ORDER_ID", "AB123456"]],
                     "issues": ["注文番号の扱いを確認"]},
-                   {"id": "2", "entities": [["PERSON", "佐藤"], ["AGE", "20歳"]]}]
+                   {"id": "2", "entities": [["PERSON", "佐藤"], ["AGE", "20歳"]]},
+                   {"id": "3", "keep": False, "reason": "今回の対象外として確認", "entities": []}]
     (tmp_path / "annotations" / "test.json").write_text(json.dumps(annotations, ensure_ascii=False))
+    (tmp_path / "policy.md").write_text("確認用合成データの注釈方針")
     return tmp_path
 
 
 def test_complete_reannotation_preserves_text_and_extra_labels(corpus):
-    state = ann.build(corpus, complete=True)
+    state = ann.build(corpus, dataset=DATASET, complete=True)
     assert state["retained_rows"] == 2
-    assert state["codex_reviewed_rows"] == 2
+    assert state["codex_reviewed_rows"] == 3
     assert len(state["rows"]) == 3
     assert state["rows"][0]["entities"][0]["start"] == 4  # Emoji counts as one codepoint.
     result = ann.export_dataset(state, corpus)
@@ -48,14 +55,14 @@ def test_missing_candidate_and_duplicates_rejected(corpus):
     p = corpus / "annotations/test.json"
     rows = json.loads(p.read_text())
     p.write_text(json.dumps(rows[:1]))
-    with pytest.raises(ValueError, match="Unannotated Japanese"):
-        ann.build(corpus, complete=True)
+    with pytest.raises(ValueError, match="Unannotated source"):
+        ann.build(corpus, dataset=DATASET, complete=True)
     p.write_text(json.dumps(rows + rows[:1]))
     with pytest.raises(ValueError, match="duplicate"):
-        ann.build(corpus)
+        ann.build(corpus, dataset=DATASET)
     p.write_text(json.dumps(rows + [{"id": "unknown", "entities": []}]))
     with pytest.raises(ValueError, match="Unknown"):
-        ann.build(corpus)
+        ann.build(corpus, dataset=DATASET)
 
 
 def test_repeated_literal_and_overlap_require_explicit_decision():
@@ -68,34 +75,9 @@ def test_repeated_literal_and_overlap_require_explicit_decision():
         ann.validate_entities("🙂山田", [{"entity_type": "PERSON", "start": 2, "end": 4, "text": "山田"}])
 
 
-def test_source_projection_ignores_labels_and_checks_cache(tmp_path, monkeypatch):
-    from benchmarks import import_ai4privacy as importer
-    raw = tmp_path / "raw"
-    raw.mkdir()
-    for i, split in enumerate(("train", "validation")):
-        data = (json.dumps({"uid": i, "source_text": "社員番号: A", "language": "wrong",
-                            "privacy_mask": [{"nonsense": "not read"}]}) + "\n").encode()
-        (raw / f"{split}.jsonl").write_bytes(data)
-        monkeypatch.setitem(importer.FILES, f"data/{split}.jsonl", ann.digest(data))
-    root = tmp_path / "output"
-    ann.prepare_source(root, raw)
-    records = [json.loads(line) for line in (root / "texts-only.jsonl").read_text().splitlines()]
-    assert set(records[0]) == {"id", "text", "split", "kana", "han", "hangul"}
-    assert records[0]["text"] == "社員番号: A"
-    (raw / "train.jsonl").write_text("tampered")
-    with pytest.raises(ValueError, match="hash mismatch"):
-        ann.prepare_source(root, raw)
-
-
-def test_han_only_uncertain_language_cannot_silently_disappear():
-    with pytest.raises(ValueError, match="Unreviewed Han-only"):
-        ann.excluded_reason(ann.text_record("x", "train", "社員番号: A"))
-    assert "中国語" in ann.excluded_reason(ann.text_record("x", "train", "请提供信息"))
-
-
 def client_for(corpus):
-    ann.build(corpus, complete=True)
-    return TestClient(create_app(corpus), base_url="http://127.0.0.1:8012", headers={"Origin": "http://127.0.0.1:8012"})
+    ann.build(corpus, dataset=DATASET, complete=True)
+    return TestClient(create_app(corpus), base_url="http://127.0.0.1:8013", headers={"Origin": "http://127.0.0.1:8013"})
 
 
 def payload(row, revision=0):
@@ -157,7 +139,7 @@ def test_exclusion_restoration_and_cross_origin(corpus):
 
 
 def test_initial_export_and_stale_draft_never_overwrite_human_work(corpus):
-    state = ann.build(corpus, complete=True)
+    state = ann.build(corpus, dataset=DATASET, complete=True)
     ann.export_dataset(state, corpus)
     client = TestClient(create_app(corpus), base_url="http://localhost", headers={"Origin": "http://localhost"})
     assert client.post("/api/export", json={"revision": 0}).status_code == 200
@@ -182,7 +164,7 @@ def test_new_unconfirmed_edits_enter_review_queue(corpus):
 
 def test_draft_benchmark_requires_opt_in_and_manifest(corpus):
     from benchmarks.run import run_benchmark
-    state = ann.build(corpus, complete=True)
+    state = ann.build(corpus, dataset=DATASET, complete=True)
     ann.export_dataset(state, corpus)
     path = corpus / "exports/revision-0-codex_draft/ja-validation.jsonl"
     with pytest.raises(ValueError, match="allow-draft"):

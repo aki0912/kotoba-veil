@@ -1,7 +1,7 @@
 # Kotoba Veil
 
-日本語PIIの評価データを本文から作り直した版と、タグを確認・修正する画面は
-[再注釈データの使い方](benchmarks/datasets/ai4privacy-reannotated.md)を参照してください。
+日本語の正解データを確認・修正する画面と評価手順は
+[ベンチマークの使い方](benchmarks/README.md)を参照してください。
 
 Kotoba Veil is a local-first Japanese PII review and masking application. It
 combines GiNZA named-entity recognition, permissively licensed pattern
@@ -85,12 +85,6 @@ python -m benchmarks.run \
 
 The dataset format, metrics, threshold options, and extension rules are documented
 in `benchmarks/README.md`.
-
-The external `ai4privacy/pii-masking-mini-10k` dataset can also be imported at a
-pinned revision. Japanese validation and training splits are measured separately,
-with original-label masking coverage and warm inference timings. See
-[`benchmarks/datasets/ai4privacy-mini.md`](benchmarks/datasets/ai4privacy-mini.md)
-for download commands, CC BY 4.0 attribution, and label mapping.
 
 ## Architecture documentation
 

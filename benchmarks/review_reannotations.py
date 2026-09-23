@@ -16,7 +16,6 @@ from benchmarks.reannotation import (
 )
 
 STATIC = Path(__file__).parent / "review_static"
-POLICY = Path(__file__).parent / "datasets" / "ai4privacy-reannotation-policy.md"
 
 
 class SpanEdit(BaseModel):
@@ -56,8 +55,8 @@ class ReviewStore:
         if draft["status"] != "codex_draft" or len(draft["rows"]) != draft["source_rows"]:
             raise ValueError("A complete Codex draft is required")
         dataset_info(draft)
-        if "dataset" in draft and not (root / "policy.md").is_file():
-            raise ValueError("A custom dataset requires its own policy.md")
+        if not (root / "policy.md").is_file():
+            raise ValueError("A dataset requires its own policy.md")
         snapshot = root / "texts-only.jsonl"
         if digest(snapshot.read_bytes()) != draft["source_snapshot_sha256"]:
             raise ValueError("Source snapshot hash mismatch")
@@ -173,7 +172,7 @@ def create_app(root: Path = ROOT) -> FastAPI:
     @app.get("/api/policy")
     def policy():
         path = root / "policy.md"
-        return {"text": (path if path.exists() else POLICY).read_text()}
+        return {"text": path.read_text()}
 
     @app.get("/api/state")
     def state():
@@ -254,7 +253,7 @@ def create_app(root: Path = ROOT) -> FastAPI:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
-    parser.add_argument("--port", type=int, default=8012)
+    parser.add_argument("--port", type=int, default=8013)
     args = parser.parse_args()
     import uvicorn
     uvicorn.run(create_app(args.root), host="127.0.0.1", port=args.port)

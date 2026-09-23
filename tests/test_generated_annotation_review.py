@@ -44,7 +44,7 @@ def test_generated_review_exports_dev_with_own_provenance(generated_corpus):
     assert sample.tags == ["user-generated", "text-annotated", "codex_draft"]
     assert not sample.dictionary_terms
     assert client.get(result["downloads"]["ja-dev.jsonl"]).status_code == 200
-    assert "ai4privacy" not in json.dumps(result, ensure_ascii=False)
+    assert result["manifest"]["attribution"] == "利用者提供"
 
 
 def test_custom_metadata_cannot_silently_drop_rows_or_change_export(generated_corpus):
@@ -92,3 +92,18 @@ def test_saved_human_edits_survive_restart_and_finalize(generated_corpus):
     assert response.json()["manifest"]["all_rows_human_reviewed"]
     saved = client.get(response.json()["downloads"]["ja-dev.jsonl"]).text
     assert json.loads(saved)["tags"][-1] == "review_complete"
+
+
+def test_review_requires_explicit_metadata_and_dataset_policy(generated_corpus):
+    root, state = generated_corpus
+    missing = dict(state)
+    del missing["dataset"]
+    with pytest.raises(ValueError, match="metadata is required"):
+        ann.export_dataset(missing, root)
+    ann.atomic_json(root / "codex-draft.json", missing)
+    with pytest.raises(ValueError, match="metadata is required"):
+        create_app(root)
+    ann.atomic_json(root / "codex-draft.json", state)
+    (root / "policy.md").unlink()
+    with pytest.raises(ValueError, match="policy.md"):
+        create_app(root)

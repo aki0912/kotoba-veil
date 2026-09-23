@@ -63,7 +63,7 @@ def run_benchmark(
     annotation_statuses = sorted({tag for sample in samples for tag in sample.tags
                                   if tag in {"codex_draft", "review_complete"}})
     reannotation_manifest = None
-    if any({"ai4privacy-reannotated", "text-annotated"} & set(sample.tags) for sample in samples):
+    if any("text-annotated" in sample.tags for sample in samples):
         manifest_path = dataset_path.parent / "manifest.json"
         if not manifest_path.exists():
             raise ValueError("Reannotated dataset requires its export manifest beside the JSONL")
